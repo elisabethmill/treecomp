@@ -81,7 +81,7 @@ train_data <- QBR_passing_data_combined[train_indices, ]
 test_data <- QBR_passing_data_combined[-train_indices, ]
 
 # Model tuning
-task_data <- QBR_passing_data_combined %>%
+task_data <- train_data %>%
   select(c_career_games, c_career_cmp, c_career_att, c_career_yds, c_career_td, c_career_int, last_games, last_passer_rating, AA, last_H_vote, won_H, last_conference, mean_QBR, yds_per_att, final_yds_per_att, c_rush_att, c_rush_yds, c_rush_td)
 task_data$last_conference <- as.factor(task_data$last_conference)
 task <- makeRegrTask(data = task_data, target = "mean_QBR")
@@ -91,7 +91,8 @@ tuned_model <- tuneRanger(
   task,
   num.trees = 500, 
   iters = 100,
-  tune.parameters = c("mtry", "min.node.size"))
+  tune.parameters = c("mtry", "min.node.size"),
+  parameters = list(replace = TRUE))
 
 print(tuned_model)
 
@@ -102,7 +103,7 @@ rf_model <- ranger(mean_QBR ~ c_career_games + c_career_cmp + c_career_att + c_c
                    + final_yds_per_att + c_rush_att + c_rush_yds + c_rush_td,
                    data = train_data,  
                    num.trees = 500, importance = "impurity",
-                   keep.inbag = TRUE, min.node.size = 41, mtry = 4)
+                   keep.inbag = TRUE, min.node.size = 84, mtry = 10)
 
 test_terminal_nodes <- predict(rf_model, data = test_data, type = "terminalNodes")$predictions
 
