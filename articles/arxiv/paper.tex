@@ -1,6 +1,6 @@
 \documentclass{article}
 
-\usepackage{authblk, array, float, graphicx, hyperref, natbib, subcaption, amsmath}
+\usepackage{amsmath, amsfonts, array, authblk, float, graphicx, hyperref, natbib, subcaption}
 \usepackage[margin=1in]{geometry}
 
 \bibliographystyle{../apa-good}
@@ -45,7 +45,7 @@ While past work in sport analytics has attempted to predict draft prospect outco
 \section{Data}
 \label{sec:data}
 
-All data used for this study are publicly available from Sports Reference \citep{sports_reference_sports_2025}. Our dataset includes 2,114 quarterbacks who played their final season at the NCAA Division I Football Bowl Subdivision (FBS) between 2001 and 2023 (inclusive) who averaged more than six games played per season and more than five passing attempts per season. For each of these quarterbacks, we obtained the following data from their college career: games played per season, passing attempts per season, passing yards per season, passing yards per attempt, passing touchdowns per season, interceptions per season, rushing attempts per season, rushing yards per season, rushing touchdowns per season, number of All-America selections, final-season Hesiman Award voting finish, final-season conference, final-season games played, final-season passing yards per attempt, and final-season passer rating.
+All data used for this study are publicly available from Sports Reference \citep{sports_reference_sports_2025}. Our dataset includes 2,114 quarterbacks who played their final season at the NCAA Division I Football Bowl Subdivision (FBS) between 2001 and 2023 (inclusive) who played more than six total games in their careers and attempted more than five passes per season. The data for each player-season include team, conference, games played, passing statistics (attempts, completions, touchdowns, interceptions), rushing statistics (attempts, yards, touchdowns), and awards (All-America designation, Heisman voting).
 
 In addition to college statistics, we obtained each player's passing attempts and Total Quarterback Rating (QBR) \citep{burke_how_2016} from each season between 2006 and 2024 (inclusive). Only available since 2006, QBR is based on expected points added (EPA), which is the change in drive scoring expectation before and after each play. It considers each quarterback's share of their team's EPA and accounts for home-field advantage, defensive strength, and garbage time. The range of QBR is from 0 to 100, and \citet{burke_how_2016} suggests thinking of it as a percentile of performance at the individual game level. For each quarterback, we calculate their average QBR per season, and we define a player who has attempted fewer than 10 career NFL passes to have a QBR of zero. Here the scale of QBR is helpful because players who reach the NFL cannot be rated below players who never reach the NFL.
 
@@ -54,62 +54,44 @@ Average QBR per season is the response variable describing the success of quarte
 \section{Methods}
 \label{sec:methods}
 
-\subsection{Data Preparation}
+\subsection{Random Forest}
 
-\subsubsection{Data Cleaning}
+Random forests are a machine learning method typically used for classification or regression \citep{breiman_random_2001}. The algorithm creates $B$ bootstrap samples of the original data and then estimates a decision within each bootstrap sample, randomly choosing at each node a subset of the features to consider for the split. The random forest's prediction is the average of the predictions of the individual treees. By fitting multiple decision trees, random forests generally achieve much lower-variance predictions than individual decision trees. The randomness introduced by the bootstrap resampling of the data and by randomly limiting eligible features at each split drives down the correlation between the trees in the forest, further reducing the variance of the fitted values.
 
-In order to clean the data frame containing college statistics, we started by joining the rushing dataframe with the passing dataframe by player and season. We transformed the data frame to contain only one player per row by taking the average of their games played, completions, attempts, passing yards, passing passing touchdowns, interceptions, rushing attempts, rushing yards, and rushing touchdowns. In addition to career statistics, we added columns for the career games played, career seasons played, career yards per attempt, final season's yards per attempt, final season, final season's games played, final season's passer rating, final season's college, and the final season's conference.  Next, we created a binary variable for winning the Heisman Award. We also created a variable for how each player finished in the Heisman voting in their final college season and how many years the player was an All-American selection. Finally, we filtered the dataset to remove players who had less than 5 average attempts per season and players with less than less than 6 career games and whose last season was before 2024 (as not to include players still in college).
+We trained the random forest model using the R package ranger \citep{wright_ranger_2015}, which is a fast implementation of the random forest algorithm. The response variable was average QBR per season (zero for players who never appeared in the NFL). The college statistics used as predictor variables were games played per season, completed passes per season, attempted passes per season, passing yards per season, passing yards per attempt, passing touchdowns per season, passing interceptions per season, rushing attempts per season, rushing yards per season, rushing touchdowns per season, number of All-America selections, final-season Hesiman Award voting finish, final-season conference, final-season games played, final-season passing yards per attempt, and final-season passer efficiency rating.
 
-In the NFL dataset, we calculated the average QBR per season played for each player. The resulting data frame contained one row per player with columns for player name and average QBR. We combined this data frame with the college data frame and replaced any missing QBR values (due to never having played in the NFL) with zero. We also filtered the data to remove any players whose final year in college was before 2000 since our NFL data only dates back to the 2006 season. Our final dataset included statistics for 2,115 quarterbacks.
-
-\subsection{Random Forest Model}
-
-Random forests are a machine learning method typically for classification or regression. For regression tasks, \textit{n} decision trees are created during training. Each tree produces a prediction of the response variable, and the final prediction is the average of the individual trees' predictions. The use of multiple random decision trees reduces overfitting by introducing more bias, which reduces variance.
-
-We trained the random forest model using the R package ranger, which is a fast implementation of the random forest algorithm \citep{wright_ranger_2015}. The response variable was average QBR per season (zero for players who never appeared in the NFL). The college statistics used as predictor variables were career games played, average completions per season, average attempts per season, average yards per season, average touchdowns per season, average interceptions per season, average rushing attempts per season, average rushing yards per season, average rushing touchdowns per season, career yards per attempt, career All-American designations, final season yards per attempt, final season games played, final season passer efficiency rating, final season Heisman award voting, whether the player won the Heisman award, and final season NCAA conference. We implemented a random 70\%/30\% training/testing data split, and the random forest contained 500 decision trees.
-
-To determine the best hyperparameters, we used the tuneRanger function from the tuneRanger package \citep{probst_tuneranger_2018} with 100 iterations and RMSE as the measure to optimize. We found the best parameters to be \texttt{min.node.size} = 41 and \texttt{mtry} = 4.
+To train the random forest model, we first implemented a random 70\%/30\% train/test split. We chose $B$ = 500 decision trees, each trained on a bootstramp sample of the data, with replacement. To determine the number of variables to consider at each node and the maximum tree size, we used the R package tuneRanger \citep{probst_tuneranger_2018}, which uses model-based optimization of out-of-bag prediction error to tune the hyperparameters. After 100 iterations of the tuning algorithm, we estimated the optimal number of variables to consider at each node to be X and the optimal minimum node size to be XX.
 
 \subsection{Similarity Score}
 
-\subsubsection{\textit{k}-Nearest Neighbors}
+\citet{lin_random_2006} previously established the relationship between $k$-NN and the random forest algorithm. In what follows, $\vec x_1, ..., \vec x_n \in \mathbb{R}^p$ represent the feature vectors in the training data, and $y_1, ..., y_n \in \mathbb{R}$ represent the outcome values in the training data. We draw $B$ bootstrap samples of the data indexed by $b \in \{1, ..., B\}$, and we fit a decision tree on each of these samples. We use $n_{b,i}$ to denote the number of times observation $i$ is included in bootstrap sample $b$, and we use $\mathcal{T}_{b,i}$ to denote the terminal node of observation $i$ in decision tree $b$. We use $|\mathcal{T}_{b,i}|$ to denote the number of training observations (with repetition) which belong to $\mathcal{T}_{b,i}$. If observation $i$ is not included in bootstrap sample $b$, then $n_{b,i} = 0$, and we define $\mathcal{T}_{b,i} = \{i\}$ and $|\mathcal{T}_{b,i}| = 1$.
 
-\citet{lin_random_2006} previously established that there is a relationship between \textit{k}-nearest neighbors and random forest. Given that the training data is $\{(x_i,y_i),i=1, ...,n\}$, a prediction for $x_0$ from any given tree in a random forest model is $$\hat{y}_m(x_0)=\sum_{i=1}^{n}W_{im}y_i$$
-where:
-\[W_{im} = 
-\begin{cases}
-\frac{1}{k_m}, & \text{if } x_i \text{ is in the same terminal node as } x_0 \text{ in tree } m, \\
-0, & \text{otherwise}.
-\end{cases} 
-\]
-and $k_m$ denotes the number of training points in that terminal node. 
+From this setup, if we query the model at a new feature vector $\vec x_0 \in \mathbb{R}^p$, then the prediction of decision tree $b$ is given by
+$$
+  \hat{y}_b(\vec x_0) = \sum_{i = 1}^{n} w_{b,0,i} \cdot y_i,
+$$
+where $w_{b,0,i} = n_{b,i} \cdot \mathbb{I}\{\mathcal{T}_{b,0} = \mathcal{T}_{b,i}\} / |\mathcal{T}_{b,0}|$ is the proportion of training data in $\mathcal{T}_{b,0}$ which comes from observation $i$. The weights $w_{b,\cdot,0}$ can be thought of as defining a local neighborhood around $\vec x_0$ for tree $b$.
 
-This setup defines a local neighborhood around $x_0$ for tree $m$.
+The prediction of the random forest for the feature vector $\vec x_0$ is simply the average of the predictions of the individual trees:
+\begin{equation*}
+  \hat{y}(\vec x_0) = \frac{1}{B} \sum_{b = 1}^B \left(\sum_{i = 1}^{n} w_{b,0,i} \cdot y_i\right),
+\end{equation*}
+which can be rewritten as
+\begin{equation}
+  \label{eqn:rf-as-knn}
+  \hat{y}(\vec x_0) = \sum_{i = 1}^n \bar w_{0,i} \cdot y_i,
+\end{equation}
+where $\bar w_{0,i} = \left(\sum_{b = 1}^B w_{b,0,i}\right) / B$ is the average weight across the trees.
 
-The final random forest prediction results from averaging the individual tree predictions $$\hat{y}(x_0)=\sum_{i=1}^M\bar{W_i}y_i$$
-where the average weight, $\bar{W_i}$, is defined as $$\frac{1}{M}\sum_{m=1}^MW_{im},$$ where $M$ is the total number of trees in the forest.  
+This formulation (\ref{eqn:rf-as-knn}) demonstrates how the random forest can be interpreted as a form of \textit{k}-NN, where the forest itself is a weighted neighborhood scheme and neighborhoods are defined by tree structure rather than distance. The training observations that share a leaf node with $\vec x_0$ in tree $b$ are considered its neighbors. The final prediction results from averaging the results across all trees, where training points that show up more frequently as neighbors receive greater weight.
 
-This formulation shows that a random forest can be interpreted as a form of \textit{k}-NN, where the forest itself is a weighted neighborhood scheme and neighborhoods are defined by tree structure rather than distance. The training points that share a leaf node with $x_0$ in tree $m$ are considered its neighbors. The final prediction results from averaging the results across all trees, where training points that show up as neighbors more frequently receive higher weight. 
+We take this a step further and emphasize the interpretation of $\bar w_{0,i}$ as the similarity of $\vec x_0$ to $\vec x_i$. Explicitly, this {\it similarity score} is defined as
+\begin{equation}
+  \bar w_{0,i} = \frac{1}{B}\sum_{b = 1}^B
+    \frac{n_{b,i}}{|\mathcal{T}_{b,0}|} \cdot \mathbb{I}\{\mathcal{T}_{b,0} = \mathcal{T}_{b,i}\}.
+\end{equation}
 
-\subsubsection{Similarity Formula}
-
-Using the random forest model's relationship to \textit{k}-NN, we can derive a formula for similarity scores between testing player \textit{i} and training player \textit{j}. We derived the formula for the similarity score between player $i$ and player $j$ to be
-$$S(i,j) = \frac{1}{M}\sum_{k=1}^{M}{\frac{N_{j,T_{i,k}}}{|T_{i,k}|}}$$
-where:
-\begin{itemize}
-    \item $|T_{i,k}|$ is the total number of players in player \textit{i}'s leaf nodes of tree \textit{k} 
-    \item $N_{j,T_{i,k}}$ is the number of times player \textit{j} appears in player \textit{i}'s leaf nodes in tree \textit{k}
-\end{itemize}
-
-We can use these similarity scores to recreate the predictions for player $i$ from the random forest by taking the weighted average of the training players' observed performance using the similarity scores as the weight.  Note that for each tree $k$, the weight $W_{jk}$ is $\frac{1}{|T_{i,k}|}$ if $j \in T_{i,k}$ and $0$ otherwise. Therefore, player $j$'s contribution across all trees can be defined as
-
-$$\bar{W}_j = \frac{1}{M} \sum_{k=1}^M \frac{N_{j,T_{i,k}}}{|T_{i,k}|} = S(i,j),$$
-
-and substituting back into the prediction formula, we obtain:
-\[
-\hat{y}_i = \sum_{j=1}^n \bar{W}_j y_j = \sum_{j=1}^n S(i,j) y_j.
-\]
-The similarity score $S(i,j)$ serves as the prediction weight for training player $j$ when predicting the output for test player $i$. 
+Note that the similarity score is not symmetric. In general, $\bar w_{0,i} \ne \bar w_{i,0}$. In fact, as we have defined it, $\bar w_{i,0}$ is undefined if $\vec x_0$ is not in the training set. The similarity score $\bar w_{0,i}$ can be thought of as describing how similar is observation 0 to observation $i$, with similarity determined adaptively in a meaningful way so as to optimize random forest predictions. In contrast, defining similarity based on Euclidean distance would not put more weight on features which are more important for predicting outcomes. The similarity score $\bar w_{0,i}$ comes with the nice property that the prediction for $\vec x_0$ is recovered by calculating the weighted average of the outcome values in the training data, using $\bar w_{0,i}$ as the weights.
 
 \section{Results}
 \label{sec:results}
@@ -146,7 +128,7 @@ Figure \ref{fig:predicted-vs-actuals} shows the QBR predictions for the top 10 p
 
 Table 2 below shows the result of calculating similarity scores for the four chosen quarterback prospects. These scores are essentially the percentage of the prospect's leaf nodes that are shared with that training player. We can use these to interpret the predictions from Table 1 as the weights each of the training players has on the prospect's QBR prediction. We can see that for Cam Ward, Shedeur Sanders, and Dillon Gabriel, the vast majority of the training players with the top ten similarity scores are relatively successful starting (or formerly starting) quarterbacks. Intuitively, since they had the three highest predictions for this draft class, it would make sense that their predictions are based on players who are/were successful in the NFL (i.e. had a high career average QBR). For Jaxson Dart, we can see that only four of the ten players who have the highest similarity scores were ever starters in the NFL. This means that the other six players likely have a QBR value that is close to zero, which explains why his prediction is significantly lower than the other three prospects.
 
-These four quarterbacks were selected to illustrate the model’s interpretability and its alignment with real-world outcomes. We used Shedeur Sanders and Cam Ward as two examples because they were both initially expected to go in the first round of this year's draft. Shedeur Sanders' draft position did unexpectedly slide, and he ended up being taken in the fifth round in the draft. However, this is likely a result of his refusal to participate in the NFL Scouting Combine, coupled with a reported bad attitude in his interviews, rather than his college performance \citep{mckenna_what_nodate}. We chose Jaxson Dart because his draft stock continuously increased after the NFL Scouting Combine and his Pro Day, and he was one of the two quarterbacks taken in the first round of the NFL draft. Finally, we chose Dillon Gabriel because he finished the highest of all quarterbacks in Heisman voting this year (3rd overall). We used a model containing the full dataset (not just the training data) to calculate the similarity scores for each of these four players using the above-described methodology. It is worth noting that both Cam Ward and Shedeur Sanders started their college careers at teams that are not in the NCAA D1 FBS, as Ward played his first season at Incarnate Word and Sanders played his first two seasons at Jackson State. This means that their college statistics used in the model do not include their statistics from these schools. The table below serves as a tool for interpreting the above random forest predictions for these draft prospects. The percentages offer a quantifiable measure of similarity based on college statistics that underlie the random forest prediction output, allowing us to interpret the predictions better. We can see that Cam Ward has the highest QBR prediction, which intuitively makes sense because he is widely regarded as the best quarterback in this year's draft class. Dillon Gabriel has a slightly higher QBR prediction than Shedeur Sanders, even though Shedeur was considered a better prospect. However, Gabriel finished higher than Shedeur in Heisman voting, and Oregon had a much better record than Colorado, and Gabriel was ultimately taken before Sanders in the draft. Jaxson Dart's relatively low prediction compared to the other three makes sense because he wasn't considered a top quarterback prospect until his performance in the NFL Combine, which this model does not take into consideration. He also performed well in his interviews with teams, which is not a quantifiable measure.
+These four quarterbacks were selected to illustrate the model's interpretability and its alignment with real-world outcomes. We used Shedeur Sanders and Cam Ward as two examples because they were both initially expected to go in the first round of this year's draft. Shedeur Sanders' draft position did unexpectedly slide, and he ended up being taken in the fifth round in the draft. However, this is likely a result of his refusal to participate in the NFL Scouting Combine, coupled with a reported bad attitude in his interviews, rather than his college performance \citep{mckenna_what_nodate}. We chose Jaxson Dart because his draft stock continuously increased after the NFL Scouting Combine and his Pro Day, and he was one of the two quarterbacks taken in the first round of the NFL draft. Finally, we chose Dillon Gabriel because he finished the highest of all quarterbacks in Heisman voting this year (3rd overall). We used a model containing the full dataset (not just the training data) to calculate the similarity scores for each of these four players using the above-described methodology. It is worth noting that both Cam Ward and Shedeur Sanders started their college careers at teams that are not in the NCAA D1 FBS, as Ward played his first season at Incarnate Word and Sanders played his first two seasons at Jackson State. This means that their college statistics used in the model do not include their statistics from these schools. The table below serves as a tool for interpreting the above random forest predictions for these draft prospects. The percentages offer a quantifiable measure of similarity based on college statistics that underlie the random forest prediction output, allowing us to interpret the predictions better. We can see that Cam Ward has the highest QBR prediction, which intuitively makes sense because he is widely regarded as the best quarterback in this year's draft class. Dillon Gabriel has a slightly higher QBR prediction than Shedeur Sanders, even though Shedeur was considered a better prospect. However, Gabriel finished higher than Shedeur in Heisman voting, and Oregon had a much better record than Colorado, and Gabriel was ultimately taken before Sanders in the draft. Jaxson Dart's relatively low prediction compared to the other three makes sense because he wasn't considered a top quarterback prospect until his performance in the NFL Combine, which this model does not take into consideration. He also performed well in his interviews with teams, which is not a quantifiable measure.
 
 \begin{table}[H]
 \resizebox{\textwidth}{!}{
