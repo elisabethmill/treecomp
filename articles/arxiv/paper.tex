@@ -49,7 +49,7 @@ All data used for this study are publicly available from Sports Reference \citep
 
 In addition to college statistics, we obtained each player's passing attempts and Total Quarterback Rating (QBR) \citep{burke_how_2016} from each season between 2006 and 2024 (inclusive). Only available since 2006, QBR is based on expected points added (EPA), which is the change in drive scoring expectation before and after each play. It considers each quarterback's share of their team's EPA and accounts for home-field advantage, defensive strength, and garbage time. The range of QBR is from 0 to 100, and \citet{burke_how_2016} suggests thinking of it as a percentile of performance at the individual game level. For each quarterback, we calculate their average QBR per season, and we define a player who has attempted fewer than 10 career NFL passes to have a QBR of zero. Here the scale of QBR is helpful because players who reach the NFL cannot be rated below players who never reach the NFL.
 
-Average QBR per season is the response variable describing the success of quarterback prospects. Because of the date ranges of the data, we do not calculate this perfectly for all of the quarterbacks in our dataset. On one extremes, quarterbacks who finished their college careers in 2001 may have appeared in the NFL but only before 2006. These quarterbacks have a QBR of zero in our dataset. On the other extreme, quarterbacks who finished their college careers in 2023 and have not yet appeared in the NFL may yet do so. These quarterbacks, too, have a QBR of zero in our dataset. This is a limitation of the data.
+Average QBR per season is the response variable describing the success of quarterback prospects. In the dataset, 91\% of college quarterbacks achieve zero QBR in the NFL, so the distribution is very right-skewed. Because of the date ranges of the data, we do not calculate QBR perfectly for all of the quarterbacks in our dataset. On one extremes, quarterbacks who finished their college careers in 2001 may have appeared in the NFL but only before 2006. These quarterbacks have a QBR of zero in our dataset. On the other extreme, quarterbacks who finished their college careers in 2023 and have not yet appeared in the NFL may yet do so. These quarterbacks, too, have a QBR of zero in our dataset. This is a limitation of the data.
 
 \section{Methods}
 \label{sec:methods}
@@ -96,35 +96,45 @@ Note that the similarity score is not symmetric. In general, $\bar w_{0,i} \ne \
 \section{Results}
 \label{sec:results}
 
-\subsection{Model Performance}
+\subsection{Random Forest}
 
-The model's test root mean squared error (RMSE) is 9.89, and 35.06\% of the model's variance is explained. A plot of the variable importance is below. 
+Figure \ref{fig:importance} shows the importance of each feature learned by the random forest model. The model's test RMSE was 9.89 units of QBR, corresponding to explaining 35.1\% of the variance of QBR in the test set. Average yards per season, completions per season and touchdowns per season in college stand out as the most important predictors of NFL success. Note that these three variables are highly correlated with each other---each pairwise correlation is at least 0.94. The next most important variables are final-season Heisman voting, average passing attempts per season and final-season passer rating.
 
 \begin{figure}[H]
     \centering
-%    \includegraphics[width=0.75\linewidth]{model plots/variable_importance.png}
-    \caption{\textit{A histogram showing the importance of each predictor variable in the random forest model predicting career average QBR.}}
+    \includegraphics[width=0.75\linewidth]{../../figures/variable_importance.pdf}
+    \caption{\textit{Variable importance plot for random forest trained to predict NFL QBR for college quarterbacks.}}
     \label{fig:importance}
 \end{figure}
 
-\begin{figure}[H]
-    \centering
-%    \includegraphics[width=0.75\linewidth]{model plots/3d_plot.png}
-    \caption{\textit{This plot shows the predictions on the testing set as a function of college touchdowns per season and final season passer rating. The color of the point represents the QBR prediction value on a continuous scale, while the x-axis represents college yards per season, and the y-axis represents the final season passer rating.}}
-\end{figure}
-
-Figure \ref{fig:predicted-vs-actuals} shows the QBR predictions for the top 10 predicted quarterbacks in the 2025 draft. Cam Ward is predicted to have the highest QBR, which matches the common consensus that he is the best quarterback in this draft class and the fact he was taken first overall in the draft. Dillon Gabriel and Shedeur Sanders were predicted second and third respectively. While Dillon Gabriel was not previously expected to be drafted as high as Shedeur Sanders, he has had a very consistent college career and finished the highest out of any quarterback in Heisman voting this year.
+Figure \ref{fig:3d-plot} visualizes the prediction function learned by the random forest by plotting predicted QBR against career passing yards per season and final-season passer rating. These are two of the most important predictors in the model, and they have a relatively low correlation. The extreme outlier by passing yards per season is Bailey Zappe, who played only one FBS season at Western Kentucky in Conference USA and was selected by the New England Patriots in the fourth round of the 2022 NFL Draft. The predictions of the random forest model are conservative, with extremely few quarterbacks predicted to exceed a QBR of 40. This speaks to the large number of college quarterbacks who achieve zero QBR in the NFL and the difficulty of distinguishing between prospects based on college performance statistics alone.
 
 \begin{figure}[H]
     \centering
-%    \includegraphics[width=0.75\linewidth]{model plots/predicted_vs_actuals.png}
-    \caption{\textit{Actual QBR plotted against the random forest generated QBR prediction for the testing dataset.}}
-    \label{fig:predicted-vs-actuals}
+    \includegraphics[width=0.75\linewidth]{../../figures/3d_plot.pdf}
+    \caption{\textit{Predicted QBR plotted against average passing yards per season and final-season passer rating.}}
+    \label{fig:3d-plot}
 \end{figure}
 
-\input{../../tables/top_ten}
+Figure \ref{fig:predicted-vs-actuals} shows actual vs. predicted QBR for all quarterbacks in the dataset. Recall that 91\% of actual QBRs are zero, which the visualization does not make clear. The errors are very right-skewed, and this illustrates why no college quarterback exceed a QBR prediction of 50.
 
-\subsection{2025 NFL Draft Comps}
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.5\linewidth]{../../figures/predicted_vs_actuals.pdf}
+  \caption{\textit{Predicted (from random forest) and actual QBR for all quarterbacks in the dataset. The vats majority (91\%) of actual QBRs are zero, meaning that the points along the x-axis represent 91\% of the data.}}
+  \label{fig:predicted-vs-actuals}
+\end{figure}
+
+\subsection{Case Study: 2025 NFL Draft}
+
+Table \ref{tab:top-ten} shows the QBR predictions for the top 10 predicted quarterbacks in the 2025 draft. Cam Ward is predicted to have the highest QBR, which matches the common consensus that he is the best quarterback in this draft class and the fact he was taken first overall in the draft. Dillon Gabriel and Shedeur Sanders were predicted second and third respectively. While Dillon Gabriel was not previously expected to be drafted as high as Shedeur Sanders, he has had a very consistent college career and finished the highest out of any quarterback in Heisman voting this year.
+
+\begin{table}[H]
+  \centering
+  \input{../../tables/top_ten}
+  \caption{\textit{The top ten career average QBR predictions for this year's draft prospects. This only includes players who are eligible to be drafted this year in the NFL and who played at an NCAA Division 1 Football Bowl Subdivision school during the 2024 season. The predictions were produced from a random forest model that used the full dataset (as opposed to just the training dataset.}}
+  \label{tab:top-ten}
+\end{table}
 
 Table 2 below shows the result of calculating similarity scores for the four chosen quarterback prospects. These scores are essentially the percentage of the prospect's leaf nodes that are shared with that training player. We can use these to interpret the predictions from Table 1 as the weights each of the training players has on the prospect's QBR prediction. We can see that for Cam Ward, Shedeur Sanders, and Dillon Gabriel, the vast majority of the training players with the top ten similarity scores are relatively successful starting (or formerly starting) quarterbacks. Intuitively, since they had the three highest predictions for this draft class, it would make sense that their predictions are based on players who are/were successful in the NFL (i.e. had a high career average QBR). For Jaxson Dart, we can see that only four of the ten players who have the highest similarity scores were ever starters in the NFL. This means that the other six players likely have a QBR value that is close to zero, which explains why his prediction is significantly lower than the other three prospects.
 
@@ -140,14 +150,14 @@ Figure \ref{fig:prospect-plots} shows the weights of the QBRs used to calculate 
 
 \begin{figure}[H]
     \centering
-%    \includegraphics[width=0.24\linewidth]{prospect plots/cw_plot1.png}
-%    \includegraphics[width=0.24\linewidth]{prospect plots/ss_plot1.png}
-%    \includegraphics[width=0.24\linewidth]{prospect plots/dg_plot1.png}
-%    \includegraphics[width=0.24\linewidth]{prospect plots/jd_plot1.png} \\
-%    \includegraphics[width=0.24\linewidth]{prospect plots/cw_plot2.png}
-%    \includegraphics[width=0.24\linewidth]{prospect plots/ss_plot2.png}
-%    \includegraphics[width=0.24\linewidth]{prospect plots/dg_plot2.png}
-%    \includegraphics[width=0.24\linewidth]{prospect plots/jd_plot2.png}
+    \includegraphics[width=0.24\linewidth]{../../figures/prospect_histogram_ward.pdf}
+    \includegraphics[width=0.24\linewidth]{../../figures/prospect_histogram_sanders.pdf}
+    \includegraphics[width=0.24\linewidth]{../../figures/prospect_histogram_gabriel.pdf}
+    \includegraphics[width=0.24\linewidth]{../../figures/prospect_histogram_dart.pdf} \\
+    \includegraphics[width=0.24\linewidth]{../../figures/prospect_similarity_ward.pdf}
+    \includegraphics[width=0.24\linewidth]{../../figures/prospect_similarity_sanders.pdf}
+    \includegraphics[width=0.24\linewidth]{../../figures/prospect_similarity_gabriel.pdf}
+    \includegraphics[width=0.24\linewidth]{../../figures/prospect_similarity_dart.pdf}
     \caption{\textit{Top: Histogram of training players’ QBR values weighted by the proportion of shared nodes with the prospect (similarity). The green vertical line represents prospect’s random forest predicted QBR based on the similarity-weighted average. The red density curve provides a smoothed visualization of the distribution.
     Bottom: Scatter plot showing similarity scores for training players plotted against their actual QBR values. Higher points indicate greater similarity to the prospect, highlighting which historical players he shared the nodes with in the random forest model.}}
     \label{fig:prospect-plots}
