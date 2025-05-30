@@ -142,26 +142,32 @@ new_plot_data <- QBR_passing_data_combined %>%
 
 {
   sputil::open_device("figures/3d_plot.pdf", height = 5)
-  plot <- ggplot(test_data, aes(x = c_career_td, y = last_passer_rating, color = predictions)) +
-    geom_point(size = 1) +  # Use points to show individual data points
-    scale_color_gradient(low = "blue", high = "red") +  # Choose your color gradient
-    labs(title = "Predictions from Random Forest Model",
-         x = "College Touchdowns per Season",
-         y = "Final Season Passer Rating",
-         color = "Predictions") +
-    theme_minimal()
+  plot <- new_plot_data |>
+    ggplot(aes(x = c_career_yds, y = last_passer_rating, color = predictions)) +
+    geom_point(size = 1) +
+    scale_color_viridis_c() +
+    labs(
+      x = "Passing Yards per Season (College)",
+      y = "Final-Season Passer Rating (College)",
+      color = "Predicted QBR"
+    ) +
+    coord_cartesian(xlim = c(0, 6000), ylim = c(0, 250)) +
+    theme_minimal() +
+    theme(legend.position = "inside", legend.position.inside = c(0.85, 0.25))
   print(plot)
   dev.off()
 }
 
 {
-  sputil::open_device("figures/predicted_vs_actuals.pdf", height = 5)
+  sputil::open_device("figures/predicted_vs_actuals.pdf", height = 5, width = 5)
   plot <- ggplot(new_plot_data, aes(x = predictions, y = mean_QBR)) +
     geom_point() +
-    labs(title = "Predictions vs. Actuals",
-         x = "Predicted QBR",
-         y = "Actual QBR") + 
-    geom_abline(intercept=0, slope=1) +
+    labs(
+      title = "Predictions vs. Actuals",
+      x = "Predicted QBR",
+      y = "Actual QBR"
+    ) + 
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
     xlim(0,100) +
     ylim(0,100) +
     theme_minimal()
