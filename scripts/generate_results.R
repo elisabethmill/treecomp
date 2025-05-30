@@ -181,7 +181,7 @@ full_rf_model <- ranger(mean_QBR ~ c_career_games + c_career_cmp + c_career_att 
                         + final_yds_per_att + c_rush_att + c_rush_yds + c_rush_td,
                         data = QBR_passing_data_combined,  
                         num.trees = 500, importance = "impurity",
-                        keep.inbag = TRUE, min.node.size = 41, mtry = 4)
+                        keep.inbag = TRUE, min.node.size = 84, mtry = 10)
 
 cfb_career_data_current <- cfb_data %>%
   filter(last_season == 2024) %>%
