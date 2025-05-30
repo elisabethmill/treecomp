@@ -23,7 +23,7 @@ for (year in 1984:2024) {
 }
 
 head(passing_data)
-write.csv(passing_data, "cfb_passing_stats_1984_2024.csv", row.names = TRUE)
+write.csv(passing_data, "data/cfb_passing_stats_1984_2024.csv", row.names = TRUE)
 
 # Construct college rushing dataframe
 rushing_data <- data.frame()
@@ -51,7 +51,7 @@ for (year in 2000:2024) {
 }
 
 head(rushing_data)
-write.csv(rushing_data, "cfb_rushing_stats_2000_2024.csv", row.names = TRUE)
+write.csv(rushing_data, "data/cfb_rushing_stats_2000_2024.csv", row.names = TRUE)
 
 # Construct NFL QBR dataframe
 QBR_passing_data <- data.frame()
@@ -75,4 +75,4 @@ for (year in 2006:2024) {
 }
 
 head(QBR_passing_data)
-write.csv(QBR_passing_data, "QBR_stats_2006_2024.csv", row.names = TRUE)
+write.csv(QBR_passing_data, "data/QBR_stats_2006_2024.csv", row.names = TRUE)
