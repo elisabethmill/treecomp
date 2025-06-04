@@ -8,6 +8,8 @@ library(xtable)
 
 cfb_data <- read.csv("data/cfb_passing_stats_1984_2024.csv") 
 
+sos_data <- read.csv("data/cfb_schedule_strength_2000_2024.csv")
+
 cfb_rush <- read.csv("data/cfb_rushing_stats_2000_2024.csv") %>%
   mutate(Player = str_replace(Player, "\\*", "")) %>%
   select(Player, Season, Team, rush_att = Att, rush_yds = Yds, rush_td = TD)
@@ -29,6 +31,7 @@ cfb_data <- cfb_data %>%
            grepl("H-9", Awards) ~ 9
          )) %>% 
   left_join(cfb_rush, by = c("Player", "Season", "Team")) %>%
+  left_join(sos_data, by = c("Team" = "School", "Season")) %>%
   group_by(Player) %>%
   summarise(
     c_career_tot_games = sum(G),
@@ -51,7 +54,8 @@ cfb_data <- cfb_data %>%
     last_conference = last(Conf),
     AA = sum(all_american),
     last_H_vote = last(heisman_voting),
-    won_H = sum(won_heisman)
+    won_H = sum(won_heisman),
+    sos = last(SOS)
   ) 
 
 cfb_career_data <- cfb_data %>%
@@ -72,7 +76,7 @@ QBR_passing_data <- read.csv("data/QBR_stats_2006_2024.csv") %>%
 QBR_passing_data_combined <- cfb_career_data %>%
   left_join(QBR_passing_data, by = "Player") %>%
   mutate_all(~ replace(., is.na(.), 0)) %>%
-  filter(last_season > 2000, Att == 0 | !(Att < 10))
+  filter(last_season > 2000, Att == 0 | !(Att < 10)) 
 
 set.seed(123)  # For reproducibility
 
@@ -82,8 +86,8 @@ test_data <- QBR_passing_data_combined[-train_indices, ]
 
 # Model tuning
 task_data <- train_data %>%
-  select(c_career_games, c_career_cmp, c_career_att, c_career_yds, c_career_td, c_career_int, last_games, last_passer_rating, AA, last_H_vote, won_H, last_conference, mean_QBR, yds_per_att, final_yds_per_att, c_rush_att, c_rush_yds, c_rush_td)
-task_data$last_conference <- as.factor(task_data$last_conference)
+  select(c_career_games, c_career_cmp, c_career_att, c_career_yds, c_career_td, c_career_int, last_games, last_passer_rating, AA, last_H_vote, won_H, sos, mean_QBR, yds_per_att, final_yds_per_att, c_rush_att, c_rush_yds, c_rush_td)
+task_data$sos <- as.numeric(task_data$sos)
 task <- makeRegrTask(data = task_data, target = "mean_QBR")
 
 
@@ -99,7 +103,7 @@ print(tuned_model)
 # Model
 rf_model <- ranger(mean_QBR ~ c_career_games + c_career_cmp + c_career_att + c_career_yds 
                    + c_career_td + c_career_int + last_games + last_passer_rating + AA 
-                   + last_H_vote + won_H + last_conference + yds_per_att
+                   + last_H_vote + won_H + sos + yds_per_att
                    + final_yds_per_att + c_rush_att + c_rush_yds + c_rush_td,
                    data = train_data,  
                    num.trees = 500, importance = "impurity",
@@ -119,7 +123,7 @@ print((explained_variance / total_variance) * 100)
 # Model plots
 importance_scores <- importance(rf_model)
 importance(rf_model)
-names(importance_scores) <- c("games/season", "completions/season", "attempts/season", "yards/season", "touchdowns/season", "interceptions/season", "final season games", "final season passer rating", "All-American seasons", "final season Heisman voting", "won Heisman Award", "final college conference", "yards/attempt", "final season yards/attempt", "rushing attempts/season", "rushing yards/season", "rushing touchdowns/season")
+names(importance_scores) <- c("games/season", "completions/season", "attempts/season", "yards/season", "touchdowns/season", "interceptions/season", "final season games", "final season passer rating", "All-American seasons", "final season Heisman voting", "won Heisman Award", "final season strength of schedule", "yards/attempt", "final season yards/attempt", "rushing attempts/season", "rushing yards/season", "rushing touchdowns/season")
 importance_df <- data.frame(
   Variable = names(importance_scores),
   Importance = importance_scores
@@ -156,7 +160,7 @@ new_plot_data <- QBR_passing_data_combined %>%
     theme(legend.position = "inside", legend.position.inside = c(0.85, 0.25))
   print(plot)
   dev.off()
-}
+  }
 
 {
   sputil::open_device("figures/predicted_vs_actuals.pdf", height = 5, width = 5)
@@ -177,7 +181,7 @@ new_plot_data <- QBR_passing_data_combined %>%
 
 full_rf_model <- ranger(mean_QBR ~ c_career_games + c_career_cmp + c_career_att + c_career_yds 
                         + c_career_td + c_career_int + last_games + last_passer_rating + AA 
-                        + last_H_vote + won_H + last_conference + yds_per_att
+                        + last_H_vote + won_H + sos + yds_per_att
                         + final_yds_per_att + c_rush_att + c_rush_yds + c_rush_td,
                         data = QBR_passing_data_combined,  
                         num.trees = 500, importance = "impurity",
@@ -269,7 +273,7 @@ ss_plot_data <- data.frame(
     coord_cartesian(ylim = c(0, 0.08))
   print(plot)
   dev.off()
-}
+  }
 
 {
   sputil::open_device("figures/prospect_similarity_sanders.pdf", height = 3, width = 3)
@@ -306,7 +310,7 @@ cw_plot_data <- data.frame(
     coord_cartesian(ylim = c(0, 0.08))
   print(plot)
   dev.off()
-}
+  }
 
 {
   sputil::open_device("figures/prospect_similarity_ward.pdf", height = 3, width = 3)
@@ -343,7 +347,7 @@ jd_plot_data <- data.frame(
     coord_cartesian(ylim = c(0, 0.08))
   print(plot)
   dev.off()
-}
+  }
 
 {
   sputil::open_device("figures/prospect_similarity_dart.pdf", height = 3, width = 3)
@@ -380,7 +384,7 @@ dg_plot_data <- data.frame(
     coord_cartesian(ylim = c(0, 0.08))
   print(plot)
   dev.off()
-}
+  }
 
 {
   sputil::open_device("figures/prospect_similarity_gabriel.pdf", height = 3, width = 3)
