@@ -107,7 +107,7 @@ rf_model <- ranger(mean_QBR ~ c_career_games + c_career_cmp + c_career_att + c_c
                    + final_yds_per_att + c_rush_att + c_rush_yds + c_rush_td,
                    data = train_data,  
                    num.trees = 500, importance = "impurity",
-                   keep.inbag = TRUE, min.node.size = 84, mtry = 10)
+                   keep.inbag = TRUE, min.node.size = 67, mtry = 5)
 
 test_terminal_nodes <- predict(rf_model, data = test_data, type = "terminalNodes")$predictions
 
@@ -185,7 +185,7 @@ full_rf_model <- ranger(mean_QBR ~ c_career_games + c_career_cmp + c_career_att 
                         + final_yds_per_att + c_rush_att + c_rush_yds + c_rush_td,
                         data = QBR_passing_data_combined,  
                         num.trees = 500, importance = "impurity",
-                        keep.inbag = TRUE, min.node.size = 84, mtry = 10)
+                        keep.inbag = TRUE, min.node.size = 67, mtry = 5)
 
 cfb_career_data_current <- cfb_data %>%
   filter(last_season == 2024) %>%
