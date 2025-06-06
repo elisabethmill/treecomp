@@ -60,7 +60,7 @@ Random forests are a machine learning method typically used for classification o
 
 We trained the random forest model using the R package ranger \citep{wright_ranger_2015}, which is a fast implementation of the random forest algorithm. The response variable was average QBR per season (zero for players who never appeared in the NFL). The college statistics used as predictor variables were games played per season, completed passes per season, attempted passes per season, passing yards per season, passing yards per attempt, passing touchdowns per season, passing interceptions per season, rushing attempts per season, rushing yards per season, rushing touchdowns per season, number of All-America selections, final-season Hesiman Award voting finish, final-season strength of schedule, final-season games played, final-season passing yards per attempt, and final-season passer efficiency rating.
 
-To train the random forest model, we first implemented a random 70\%/30\% train/test split. We chose $B$ = 500 decision trees, each trained on a bootstramp sample of the data, with replacement. To determine the number of variables to consider at each node and the maximum tree size, we used the R package tuneRanger \citep{probst_tuneranger_2018}, which uses model-based optimization of out-of-bag prediction error to tune the hyperparameters. After 100 iterations of the tuning algorithm, we estimated the optimal number of variables to consider at each node to be X and the optimal minimum node size to be XX.
+To train the random forest model, we first implemented a random 70\%/30\% train/test split. We chose $B$ = 500 decision trees, each trained on a bootstramp sample of the data, with replacement. To determine the number of variables to consider at each node and the maximum tree size, we used the R package tuneRanger \citep{probst_tuneranger_2018}, which uses model-based optimization of out-of-bag prediction error to tune the hyperparameters. After 100 iterations of the tuning algorithm, we estimated the optimal number of variables to consider at each node to be 5 and the optimal minimum node size to be 67.
 
 \subsection{Similarity Score}
 
@@ -99,7 +99,7 @@ Note that the similarity score is not symmetric. In general, $\bar w_{0,i} \ne \
 
 \subsection{Random Forest}
 
-Figure \ref{fig:importance} shows the importance of each feature learned by the random forest model. The model's test RMSE was 9.89 units of QBR, corresponding to explaining 35.1\% of the variance of QBR in the test set. Average yards per season, completions per season and touchdowns per season in college stand out as the most important predictors of NFL success. Note that these three variables are highly correlated with each other---each pairwise correlation is at least 0.94. The next most important variables are final-season Heisman voting, average passing attempts per season and final-season passer rating.
+Figure \ref{fig:importance} shows the importance of each feature learned by the random forest model. The model's test RMSE was 10.07 units of QBR, corresponding to explaining 32.9\% of the variance of QBR in the test set. Average yards per season, completions per season and touchdowns per season in college stand out as the most important predictors of NFL success. Note that these three variables are highly correlated with each other---each pairwise correlation is at least 0.94. The next most important variables are final-season Heisman voting, average passing attempts per season and final-season passer rating.
 
 \begin{figure}[H]
     \centering
