@@ -6,9 +6,9 @@ library(mlr)
 library(ggplot2)
 library(xtable)
 
-cfb_data <- read.csv("cfb_passing_stats_1984_2024.csv") 
+cfb_data <- read.csv("data/cfb_passing_stats_1984_2024.csv") 
 
-cfb_rush <- read.csv("cfb_rushing_stats_2000_2024.csv") %>%
+cfb_rush <- read.csv("data/cfb_rushing_stats_2000_2024.csv") %>%
   mutate(Player = str_replace(Player, "\\*", "")) %>%
   select(Player, Season, Team, rush_att = Att, rush_yds = Yds, rush_td = TD)
 
@@ -59,7 +59,7 @@ cfb_career_data <- cfb_data %>%
          c_career_tot_games > 6,
          c_career_att > 5)
 
-QBR_passing_data <- read.csv("QBR_stats_2006_2024.csv") %>%
+QBR_passing_data <- read.csv("data/QBR_stats_2006_2024.csv") %>%
   filter(Pos == "QB") %>%
   group_by(Player) %>%
   summarise(mean_QBR = mean(QBR),
@@ -125,34 +125,55 @@ importance_df <- data.frame(
   Importance = importance_scores
 )
 
-ggplot(importance_df, aes(x = reorder(Variable, Importance), y = Importance)) +
-  geom_bar(stat = "identity") +
-  coord_flip() +  
-  labs(title = "Variable Importance",
-       x = "", y = "Importance") +
-  theme_minimal()
+{
+  sputil::open_device("figures/variable_importance.pdf", height = 5)
+  plot <- ggplot(importance_df, aes(x = reorder(Variable, Importance), y = Importance)) +
+    geom_bar(stat = "identity") +
+    coord_flip() +  
+    labs(title = "Variable Importance",
+         x = "", y = "Importance") +
+    theme_minimal()
+  print(plot)
+  dev.off()
+}
 
 new_plot_data <- QBR_passing_data_combined %>%
   mutate(predictions = predict(rf_model, data = QBR_passing_data_combined)$predictions)
 
-ggplot(new_plot_data, aes(x = predictions, y = mean_QBR)) +
-  geom_point() +
-  labs(title = "Predictions vs. Actuals",
-       x = "Predicted QBR",
-       y = "Actual QBR") + 
-  geom_abline(intercept=0, slope=1) +
-  xlim(0,100) +
-  ylim(0,100) +
-  theme_minimal()
+{
+  sputil::open_device("figures/3d_plot.pdf", height = 5)
+  plot <- new_plot_data |>
+    ggplot(aes(x = c_career_yds, y = last_passer_rating, color = predictions)) +
+    geom_point(size = 1) +
+    scale_color_viridis_c() +
+    labs(
+      x = "Passing Yards per Season (College)",
+      y = "Final-Season Passer Rating (College)",
+      color = "Predicted QBR"
+    ) +
+    coord_cartesian(xlim = c(0, 6000), ylim = c(0, 250)) +
+    theme_minimal() +
+    theme(legend.position = "inside", legend.position.inside = c(0.85, 0.25))
+  print(plot)
+  dev.off()
+}
 
-ggplot(test_data, aes(x = c_career_td, y = last_passer_rating, color = predictions)) +
-  geom_point(size = 1) +  # Use points to show individual data points
-  scale_color_gradient(low = "blue", high = "red") +  # Choose your color gradient
-  labs(title = "Predictions from Random Forest Model",
-       x = "College Touchdowns per Season",
-       y = "Final Season Passer Rating",
-       color = "Predictions") +
-  theme_minimal()
+{
+  sputil::open_device("figures/predicted_vs_actuals.pdf", height = 5, width = 5)
+  plot <- ggplot(new_plot_data, aes(x = predictions, y = mean_QBR)) +
+    geom_point() +
+    labs(
+      title = "Predictions vs. Actuals",
+      x = "Predicted QBR",
+      y = "Actual QBR"
+    ) + 
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+    xlim(0,100) +
+    ylim(0,100) +
+    theme_minimal()
+  print(plot)
+  dev.off()
+}
 
 full_rf_model <- ranger(mean_QBR ~ c_career_games + c_career_cmp + c_career_att + c_career_yds 
                         + c_career_td + c_career_int + last_games + last_passer_rating + AA 
@@ -160,29 +181,23 @@ full_rf_model <- ranger(mean_QBR ~ c_career_games + c_career_cmp + c_career_att 
                         + final_yds_per_att + c_rush_att + c_rush_yds + c_rush_td,
                         data = QBR_passing_data_combined,  
                         num.trees = 500, importance = "impurity",
-                        keep.inbag = TRUE, min.node.size = 41, mtry = 4)
+                        keep.inbag = TRUE, min.node.size = 84, mtry = 10)
 
 cfb_career_data_current <- cfb_data %>%
   filter(last_season == 2024) %>%
   mutate_all(~ replace(., is.na(.), 0))
 
 cfb_career_data_current$predictions <- round(predict(full_rf_model, data = cfb_career_data_current)$predictions, 3)
-player_predictions_table <- cbind(cfb_career_data_current$Player, cfb_career_data_current$predictions)
 
-player_predictions_table <- as.data.frame(player_predictions_table)
+cfb_career_data_current %>%
+  select(Player, predictions) %>%
+  # Remove draft-ineligible players
+  filter(!Player %in% c("Darian Mensah", "Cade Klubnik", "E.J. Warner")) %>%
+  arrange(-predictions) %>%
+  head(10) %>%
+  mutate(predictions = sprintf("%.1f", predictions)) %>%
+  sputil::write_latex_table(file = "tables/top_ten.tex")
 
-colnames(player_predictions_table) <- c("Player", "Prediction")
-player_predictions_table <- player_predictions_table %>% 
-  arrange(desc(as.numeric(Prediction))) %>%
-  filter(Player != "Darian Mensah",
-         Player != "Cade Klubnik",
-         Player != "E.J. Warner")
-
-top_10 <- head(player_predictions_table, 10)
-
-colnames(top_10) <- c("Player", "Predicted QBR")
-
-latex_table <- xtable(top_10)
 
 test_names <- cfb_career_data_current$Player
 test_terminal_nodes <- predict(full_rf_model, data = cfb_career_data_current, type = "terminalNodes")$predictions
@@ -242,25 +257,32 @@ ss_plot_data <- data.frame(
 ) %>%
   filter(sim_score > 0)
 
-plot1 <- ggplot(ss_plot_data, aes(x = QBR, y = ..density.., weight = sim_score)) +
-  geom_histogram(binwidth = 5, color = "blue", fill = "blue", alpha = 0.8) +
-  geom_density(aes(x = QBR, y = ..density..), 
-               color = "red", fill = "red", alpha = 0.5, adjust = 0.5) +
-  theme_minimal() +
-  labs(x = "QBR", y = "Weights",
-       title = "Shedeur Sanders Histogram of \nWeights vs. QBR") +
-  geom_vline(aes(xintercept = cfb_career_data_current[ss_index, ]$predictions), 
-             color = "green")
-plot1
+{
+  sputil::open_device("figures/prospect_histogram_sanders.pdf", height = 3, width = 3)
+  plot <- ggplot(ss_plot_data, aes(x = QBR, y = ..density.., weight = sim_score)) +
+    geom_histogram(binwidth = 5, color = "blue", fill = "blue", alpha = 0.8) +
+    theme_minimal() +
+    labs(x = "QBR", y = "Weights",
+         title = "Shedeur Sanders") +
+    geom_vline(aes(xintercept = cfb_career_data_current[ss_index, ]$predictions), 
+               color = "green") +
+    coord_cartesian(ylim = c(0, 0.08))
+  print(plot)
+  dev.off()
+}
 
-plot2 <- ggplot(ss_plot_data, aes(x = QBR, y = sim_score)) +
-  geom_point() +
-  ggtitle("Shedeur Sanders Similarity Plot") +
-  xlab("Training Player QBR Value") +
-  ylab("Training Player Similarity Score") +
-  theme_minimal()
-
-plot2
+{
+  sputil::open_device("figures/prospect_similarity_sanders.pdf", height = 3, width = 3)
+  plot <- ggplot(ss_plot_data, aes(x = QBR, y = sim_score)) +
+    geom_point() +
+    ggtitle("Shedeur Sanders") +
+    xlab("Training Player QBR Value") +
+    ylab("Training Player Similarity Score") +
+    coord_cartesian(ylim = c(0, 0.03)) +
+    theme_minimal()
+  print(plot)
+  dev.off()
+}
 
 cw_index <- which(cfb_career_data_current$Player == "Cameron Ward")
 
@@ -273,23 +295,31 @@ cw_plot_data <- data.frame(
 ) %>%
   filter(sim_score > 0)
 
-plot1 <- ggplot(cw_plot_data, aes(x = QBR, y = ..density.., weight = sim_score)) +
-  geom_histogram(binwidth = 5, color = "blue", fill = "blue", alpha = 0.8) +
-  geom_density(aes(x = QBR, y = ..density..), 
-               color = "red", fill = "red", alpha = 0.5, adjust = 0.5) +
-  theme_minimal() +
-  labs(x = "QBR", y = "Weights", title = "Cam Ward Histogram of \nWeights vs. QBR") +
-  geom_vline(aes(xintercept = cfb_career_data_current[cw_index, ]$predictions), 
-             color = "green")
-plot1
+{
+  sputil::open_device("figures/prospect_histogram_ward.pdf", height = 3, width = 3)
+  plot <- ggplot(cw_plot_data, aes(x = QBR, y = ..density.., weight = sim_score)) +
+    geom_histogram(binwidth = 5, color = "blue", fill = "blue", alpha = 0.8) +
+    theme_minimal() +
+    labs(x = "QBR", y = "Weights", title = "Cam Ward") +
+    geom_vline(aes(xintercept = cfb_career_data_current[cw_index, ]$predictions), 
+               color = "green") +
+    coord_cartesian(ylim = c(0, 0.08))
+  print(plot)
+  dev.off()
+}
 
-plot2 <- ggplot(cw_plot_data, aes(x = QBR, y = sim_score)) +
-  geom_point() +
-  ggtitle("Cam Ward Similarity Plot") +
-  xlab("Training Player QBR Value") +
-  ylab("Training Player Similarity Score") +
-  theme_minimal()
-plot2
+{
+  sputil::open_device("figures/prospect_similarity_ward.pdf", height = 3, width = 3)
+  plot <- ggplot(cw_plot_data, aes(x = QBR, y = sim_score)) +
+    geom_point() +
+    ggtitle("Cam Ward") +
+    xlab("Training Player QBR Value") +
+    ylab("Training Player Similarity Score") +
+    coord_cartesian(ylim = c(0, 0.03)) +
+    theme_minimal()
+  print(plot)
+  dev.off()
+}
 
 jd_index <- which(cfb_career_data_current$Player == "Jaxson Dart")
 
@@ -302,25 +332,31 @@ jd_plot_data <- data.frame(
 ) %>%
   filter(sim_score > 0)
 
-plot1 <- ggplot(jd_plot_data, aes(x = QBR, y = ..density.., weight = sim_score)) +
-  geom_histogram(binwidth = 5, color = "blue", fill = "blue", alpha = 0.8) +
-  geom_density(aes(x = QBR, y = ..density..), 
-               color = "red", fill = "red", alpha = 0.5, adjust = 0.5) +
-  theme_minimal() +
-  labs(x = "QBR", y = "Weights", title = "Jaxson Dart Histogram of \nWeights vs. QBR") +
-  geom_vline(aes(xintercept = cfb_career_data_current[jd_index, ]$predictions),
-             color = "green")
+{
+  sputil::open_device("figures/prospect_histogram_dart.pdf", height = 3, width = 3)
+  plot <- ggplot(jd_plot_data, aes(x = QBR, y = ..density.., weight = sim_score)) +
+    geom_histogram(binwidth = 5, color = "blue", fill = "blue", alpha = 0.8) +
+    theme_minimal() +
+    labs(x = "QBR", y = "Weights", title = "Jaxson Dart") +
+    geom_vline(aes(xintercept = cfb_career_data_current[jd_index, ]$predictions),
+               color = "green") +
+    coord_cartesian(ylim = c(0, 0.08))
+  print(plot)
+  dev.off()
+}
 
-plot1
-
-plot2 <- ggplot(jd_plot_data, aes(x = QBR, y = sim_score)) +
-  geom_point() +
-  ggtitle("Jaxson Dart Similarity Plot") +
-  xlab("Training Player QBR Value") +
-  ylab("Training Player Similarity Score") +
-  theme_minimal()
-
-plot2
+{
+  sputil::open_device("figures/prospect_similarity_dart.pdf", height = 3, width = 3)
+  plot <- ggplot(jd_plot_data, aes(x = QBR, y = sim_score)) +
+    geom_point() +
+    ggtitle("Jaxson Dart") +
+    xlab("Training Player QBR Value") +
+    ylab("Training Player Similarity Score") +
+    coord_cartesian(ylim = c(0, 0.03)) +
+    theme_minimal()
+  print(plot)
+  dev.off()
+}
 
 dg_index <- which(cfb_career_data_current$Player == "Dillon Gabriel")
 
@@ -333,24 +369,31 @@ dg_plot_data <- data.frame(
 ) %>%
   filter(sim_score > 0)
 
-plot1 <- ggplot(dg_plot_data, aes(x = QBR, y = ..density.., weight = sim_score)) +
-  geom_histogram(binwidth = 5, color = "blue", fill = "blue", alpha = 0.8) +
-  geom_density(aes(x = QBR, y = ..density..), 
-               color = "red", fill = "red", alpha = 0.5, adjust = 0.5) +
-  theme_minimal() +
-  labs(x = "QBR", y = "Weights", title = "Dillon Gabriel Histogram of \nWeights vs. QBR") +
-  geom_vline(aes(xintercept = cfb_career_data_current[dg_index, ]$predictions),
-             color = "green")
+{
+  sputil::open_device("figures/prospect_histogram_gabriel.pdf", height = 3, width = 3)
+  plot <- ggplot(dg_plot_data, aes(x = QBR, y = ..density.., weight = sim_score)) +
+    geom_histogram(binwidth = 5, color = "blue", fill = "blue", alpha = 0.8) +
+    theme_minimal() +
+    labs(x = "QBR", y = "Weights", title = "Dillon Gabriel") +
+    geom_vline(aes(xintercept = cfb_career_data_current[dg_index, ]$predictions),
+               color = "green") +
+    coord_cartesian(ylim = c(0, 0.08))
+  print(plot)
+  dev.off()
+}
 
-plot1
-
-plot2 <- ggplot(dg_plot_data, aes(x = QBR, y = sim_score)) +
-  geom_point() +
-  ggtitle("Dillon Gabriel Similarity Plot") +
-  xlab("Training Player QBR Value") +
-  ylab("Training Player Similarity Score") +
-  theme_minimal()
-plot2
+{
+  sputil::open_device("figures/prospect_similarity_gabriel.pdf", height = 3, width = 3)
+  plot <- ggplot(dg_plot_data, aes(x = QBR, y = sim_score)) +
+    geom_point() +
+    ggtitle("Dillon Gabriel") +
+    xlab("Training Player QBR Value") +
+    ylab("Training Player Similarity Score") +
+    coord_cartesian(ylim = c(0, 0.03)) +
+    theme_minimal()
+  print(plot)
+  dev.off()
+}
 
 cw_index <- which(cfb_career_data_current$Player == "Cameron Ward")
 cw_similarity_scores <- similarity_matrix[cw_index, ]
@@ -359,7 +402,7 @@ sorted_similarity_scores <- sort(cw_similarity_scores, decreasing = TRUE)
 
 cw_top_10 <- data.frame(
   `Player Name` = names(sorted_similarity_scores)[1:10],
-  Similarity = paste0(round(sorted_similarity_scores[1:10], 4) * 100, "%"),
+  Similarity = paste0(sprintf("%.1f", 100 * sorted_similarity_scores[1:10]), "\\%"),
   Base_Player = "Cameron Ward"
 )
 
@@ -371,7 +414,7 @@ sorted_similarity_scores <- sort(jd_similarity_scores, decreasing = TRUE)
 
 jd_top_10 <- data.frame(
   `Player Name` = names(sorted_similarity_scores)[1:10],
-  Similarity = paste0(round(sorted_similarity_scores[1:10], 4) * 100, "%"),
+  Similarity = paste0(sprintf("%.1f", 100 * sorted_similarity_scores[1:10]), "\\%"),
   Base_Player = "Jaxson Dart"
 )
 
@@ -383,7 +426,7 @@ sorted_similarity_scores <- sort(dg_similarity_scores, decreasing = TRUE)
 
 dg_top_10 <- data.frame(
   `Player Name` = names(sorted_similarity_scores)[1:10],
-  Similarity = paste0(round(sorted_similarity_scores[1:10], 4) * 100, "%"),
+  Similarity = paste0(sprintf("%.1f", 100 * sorted_similarity_scores[1:10]), "\\%"),
   Base_Player = "Dillon Gabriel"
 )
 
@@ -395,7 +438,7 @@ sorted_similarity_scores <- sort(ss_similarity_scores, decreasing = TRUE)
 
 ss_top_10 <- data.frame(
   `Player Name` = names(sorted_similarity_scores)[1:10],
-  Similarity = paste0(round(sorted_similarity_scores[1:10], 4) * 100, "%"),
+  Similarity = paste0(sprintf("%.1f", 100 * sorted_similarity_scores[1:10]), "\\%"),
   Base_Player = "Shedeur Sanders"
 )
 
@@ -416,15 +459,5 @@ ss_top_10_wide <- ss_top_10 %>%
   select(`Player.Name`, Similarity) %>%
   setNames(c("SS_Player", "SS_Similarity"))
 
-# Combine all 4 into a single side-by-side data frame
-side_by_side <- cbind(
-  cw_top_10_wide,
-  ss_top_10_wide,
-  jd_top_10_wide,
-  dg_top_10_wide
-  
-)
-
-print(side_by_side)
-
-latex_table <- xtable(side_by_side)
+cbind(cw_top_10_wide, ss_top_10_wide, jd_top_10_wide, dg_top_10_wide) %>%
+  sputil::write_latex_table(file = "tables/side_by_side_similarity.tex")
