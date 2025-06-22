@@ -63,44 +63,20 @@ cfb_career_data <- cfb_data %>%
          c_career_tot_games > 6,
          c_career_att > 5)
 
-set.seed(123)
-
-nfl_data <- read.csv("data/QBR_stats_2006_2024.csv") %>%
+QBR_passing_data <- read.csv("data/QBR_stats_2006_2024.csv") %>%
   filter(Pos == "QB") %>%
-  mutate(QBR = ifelse(is.na(QBR), 0, QBR),
-         Att = ifelse(is.na(Att), 0, Att))
-
-QBR2_passing_data <- nfl_data %>%
-  arrange(Player, Season) %>%
   group_by(Player) %>%
-  mutate(QBR2 = lead(QBR),
-         QBR2 = ifelse(is.na(QBR2), 0, QBR2)) %>%
-  filter(Season != 2024) 
-
-QBR2_model <- nls(
-  formula = QBR2 ~ (Att * QBR) / (Att + c),
-  data = QBR2_passing_data,
-  start = list(c = 1)  # Starting guess for c
-)
-
-summary(QBR2_model)
-
-c <- coef(QBR2_model)[1]
-
-QBR_passing_data <- nfl_data %>%
-  group_by(Player) %>%
-  summarise(
-    Career_Att = sum(Att),
-    mean_QBR = mean(QBR),
-    seasons = n(),
-    Avg_Att = mean(Att)
-  ) %>%
-  mutate(reg_QBR = ((Avg_Att * mean_QBR) / (Avg_Att + c)))
+  summarise(mean_QBR = mean(QBR),
+            Att = sum(Att),
+            seasons = n()) %>%
+  mutate(
+    mean_QBR = ifelse(is.na(mean_QBR), 0, mean_QBR)
+  )
 
 QBR_passing_data_combined <- cfb_career_data %>%
   left_join(QBR_passing_data, by = "Player") %>%
   mutate_all(~ replace(., is.na(.), 0)) %>%
-  filter(last_season > 2000) 
+  filter(last_season > 2000, Att == 0 | !(Att < 10)) 
 
 set.seed(123)  # For reproducibility
 
@@ -110,9 +86,9 @@ test_data <- QBR_passing_data_combined[-train_indices, ]
 
 # Model tuning
 task_data <- train_data %>%
-  select(c_career_games, c_career_cmp, c_career_att, c_career_yds, c_career_td, c_career_int, last_games, last_passer_rating, AA, last_H_vote, won_H, sos, reg_QBR, yds_per_att, final_yds_per_att, c_rush_att, c_rush_yds, c_rush_td)
+  select(c_career_games, c_career_cmp, c_career_att, c_career_yds, c_career_td, c_career_int, last_games, last_passer_rating, AA, last_H_vote, won_H, sos, mean_QBR, yds_per_att, final_yds_per_att, c_rush_att, c_rush_yds, c_rush_td)
 task_data$sos <- as.numeric(task_data$sos)
-task <- makeRegrTask(data = task_data, target = "reg_QBR")
+task <- makeRegrTask(data = task_data, target = "mean_QBR")
 
 
 tuned_model <- tuneRanger(
@@ -125,21 +101,21 @@ tuned_model <- tuneRanger(
 print(tuned_model)
 
 # Model
-rf_model <- ranger(reg_QBR ~ c_career_games + c_career_cmp + c_career_att + c_career_yds 
+rf_model <- ranger(mean_QBR ~ c_career_games + c_career_cmp + c_career_att + c_career_yds 
                    + c_career_td + c_career_int + last_games + last_passer_rating + AA 
                    + last_H_vote + won_H + sos + yds_per_att
                    + final_yds_per_att + c_rush_att + c_rush_yds + c_rush_td,
                    data = train_data,  
                    num.trees = 500, importance = "impurity",
-                   keep.inbag = TRUE, min.node.size = 50, mtry = 5)
+                   keep.inbag = TRUE, min.node.size = 67, mtry = 5)
 
 test_terminal_nodes <- predict(rf_model, data = test_data, type = "terminalNodes")$predictions
 
 test_data$predictions <- predict(rf_model, data = test_data)$predictions
 
-rmse <- sqrt(mean((test_data$reg_QBR - test_data$predictions)^2))
-total_variance <- var(test_data$reg_QBR)
-residuals <- test_data$reg_QBR - test_data$predictions
+rmse <- sqrt(mean((test_data$mean_QBR - test_data$predictions)^2))
+total_variance <- var(test_data$mean_QBR)
+residuals <- test_data$mean_QBR - test_data$predictions
 residual_variance <- var(residuals)
 explained_variance <- total_variance - residual_variance
 print((explained_variance / total_variance) * 100)
@@ -188,7 +164,7 @@ new_plot_data <- QBR_passing_data_combined %>%
 
 {
   sputil::open_device("figures/predicted_vs_actuals.pdf", height = 5, width = 5)
-  plot <- ggplot(new_plot_data, aes(x = predictions, y = reg_QBR)) +
+  plot <- ggplot(new_plot_data, aes(x = predictions, y = mean_QBR)) +
     geom_point() +
     labs(
       title = "Predictions vs. Actuals",
@@ -203,13 +179,13 @@ new_plot_data <- QBR_passing_data_combined %>%
   dev.off()
 }
 
-full_rf_model <- ranger(reg_QBR ~ c_career_games + c_career_cmp + c_career_att + c_career_yds 
+full_rf_model <- ranger(mean_QBR ~ c_career_games + c_career_cmp + c_career_att + c_career_yds 
                         + c_career_td + c_career_int + last_games + last_passer_rating + AA 
                         + last_H_vote + won_H + sos + yds_per_att
                         + final_yds_per_att + c_rush_att + c_rush_yds + c_rush_td,
                         data = QBR_passing_data_combined,  
                         num.trees = 500, importance = "impurity",
-                        keep.inbag = TRUE, min.node.size = 50, mtry = 5)
+                        keep.inbag = TRUE, min.node.size = 67, mtry = 5)
 
 cfb_career_data_current <- cfb_data %>%
   filter(last_season == 2024) %>%
@@ -281,7 +257,7 @@ ss_similarity_scores <- similarity_matrix[ss_index, ]
 ss_plot_data <- data.frame(
   player_name = QBR_passing_data_combined$Player,
   sim_score = ss_similarity_scores,
-  QBR = QBR_passing_data_combined$reg_QBR
+  QBR = QBR_passing_data_combined$mean_QBR
 ) %>%
   filter(sim_score > 0)
 
@@ -319,7 +295,7 @@ cw_similarity_scores <- similarity_matrix[cw_index, ]
 cw_plot_data <- data.frame(
   player_name = QBR_passing_data_combined$Player,
   sim_score = cw_similarity_scores,
-  QBR = QBR_passing_data_combined$reg_QBR
+  QBR = QBR_passing_data_combined$mean_QBR
 ) %>%
   filter(sim_score > 0)
 
@@ -356,7 +332,7 @@ jd_similarity_scores <- similarity_matrix[jd_index, ]
 jd_plot_data <- data.frame(
   player_name = QBR_passing_data_combined$Player,
   sim_score = jd_similarity_scores,
-  QBR = QBR_passing_data_combined$reg_QBR
+  QBR = QBR_passing_data_combined$mean_QBR
 ) %>%
   filter(sim_score > 0)
 
@@ -393,7 +369,7 @@ dg_similarity_scores <- similarity_matrix[dg_index, ]
 dg_plot_data <- data.frame(
   player_name = QBR_passing_data_combined$Player,
   sim_score = dg_similarity_scores,
-  QBR = QBR_passing_data_combined$reg_QBR
+  QBR = QBR_passing_data_combined$mean_QBR
 ) %>%
   filter(sim_score > 0)
 
