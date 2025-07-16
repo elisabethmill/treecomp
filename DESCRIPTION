@@ -1,0 +1,19 @@
+Package: treecomp
+Title: A Comps-Based Approach for Interpreting Tree-Based Predictions
+Version: 0.0.0.9000
+Authors@R: c(
+  person("Elisabeth", "Millington", role = "aut"),
+  person("Scott", "Powers", email = "scott.powers@rice.edu", role = c("aut", "cre")))
+Description: This package extracts similarity scores from fitted random forest objects
+  (randomForest or ranger) corresponding to the distances implied by the adaptive nearest neighbors
+  interpretation of random forests. These similarity scores can be interpreted as providing the
+  "comps", or comparable training/reference data points, for the new data points provided. When the
+  training data are used as the reference data, the random forest prediction is equivalent to the
+  weighted average of the training data outcomes, weighted according to the similarity scores.
+License: GPL (>= 3)
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Suggests:
+  randomForest,
+  ranger

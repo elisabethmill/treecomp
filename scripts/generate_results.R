@@ -203,13 +203,17 @@ new_plot_data <- QBR_passing_data_combined %>%
   dev.off()
 }
 
-full_rf_model <- ranger(reg_QBR ~ c_career_games + c_career_cmp + c_career_att + c_career_yds 
-                        + c_career_td + c_career_int + last_games + last_passer_rating + AA 
-                        + last_H_vote + won_H + sos + yds_per_att
-                        + final_yds_per_att + c_rush_att + c_rush_yds + c_rush_td,
-                        data = QBR_passing_data_combined,  
-                        num.trees = 500, importance = "impurity",
-                        keep.inbag = TRUE, min.node.size = 50, mtry = 5)
+full_rf_model <- ranger(
+  formula = reg_QBR ~ c_career_games + c_career_cmp + c_career_att + c_career_yds + c_career_td +
+    c_career_int + last_games + last_passer_rating + AA + last_H_vote + won_H + sos + yds_per_att +
+    final_yds_per_att + c_rush_att + c_rush_yds + c_rush_td,
+  data = QBR_passing_data_combined,
+  num.trees = 500,
+  importance = "impurity",
+  keep.inbag = TRUE,
+  min.node.size = 50,
+  mtry = 5
+)
 
 cfb_career_data_current <- cfb_data %>%
   filter(last_season == 2024) %>%
@@ -226,49 +230,11 @@ cfb_career_data_current %>%
   mutate(predictions = sprintf("%.1f", predictions)) %>%
   sputil::write_latex_table(file = "tables/top_ten.tex")
 
-
-test_names <- cfb_career_data_current$Player
-test_terminal_nodes <- predict(full_rf_model, data = cfb_career_data_current, type = "terminalNodes")$predictions
-rownames(test_terminal_nodes) <- test_names
-train_terminal_nodes <- predict(full_rf_model, data = QBR_passing_data_combined, type = "terminalNodes")$predictions
-rownames(train_terminal_nodes) <- QBR_passing_data_combined$Player
-inbag_counts <- full_rf_model$inbag.counts
-inbag_counts <- do.call(cbind, inbag_counts)
-
-M <- ncol(train_terminal_nodes)  # Number of trees
-n_test <- nrow(cfb_career_data_current)  # Number of test samples
-n_train <- nrow(QBR_passing_data_combined)  # Number of training samples
-
-# Initialize similarity matrix (rows = test players, cols = training players)
-similarity_matrix <- matrix(0, nrow = n_test, ncol = n_train)
-
-# Loop over all trees
-for (m in 1:M) {
-  
-  train_nodes_m <- train_terminal_nodes[, m]  # Terminal nodes for training samples in tree m
-  test_nodes_m <- test_terminal_nodes[, m]  # Terminal nodes for test samples in tree m
-  
-  # Loop over each test sample
-  for (t in 1:n_test) {
-    
-    # Find training samples in the same terminal node as the test sample
-    matching_train_samples <- train_nodes_m == test_nodes_m[t]
-    
-    if (sum(matching_train_samples) > 0) {
-      # Extract inbag counts for matching training samples in the current tree
-      inbag_weights <- inbag_counts[matching_train_samples, m]
-      
-      # Normalize weights so they sum to 1 for each tree
-      inbag_weights <- inbag_weights / sum(inbag_weights)
-      
-      # Update similarity matrix (sum similarity scores over all trees)
-      similarity_matrix[t, matching_train_samples] <- similarity_matrix[t, matching_train_samples] + inbag_weights
-    }
-  }
-}
-
-# Normalize similarity scores across trees (final similarity score per test/training pair)
-similarity_matrix <- similarity_matrix / M
+similarity_matrix <- treecomp::extract_similarity(
+  object = full_rf_model,
+  newdata = cfb_career_data_current,
+  refdata = QBR_passing_data_combined
+)
 
 similarity_df <- as.data.frame(similarity_matrix)
 colnames(similarity_df) <- QBR_passing_data_combined$Player  # Name columns by training players
