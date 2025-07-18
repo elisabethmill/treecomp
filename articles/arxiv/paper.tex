@@ -189,6 +189,10 @@ Figure \ref{fig:prospect-plots} provides a full breakdown of the random forest p
 \section{Software}
 \label{sec:software}
 
+The primary contribution of the present work is less about the specific application to quarterback prospects in football and more about introducing the concept of extracting similarity scores from random forests to interpret the predictions. To this end, we have published the R package treecomp, which provides a simple function interface for extracting similarity scores from fitted random forest objects. Currently, the package handles fitted random forests from the ranger and randomForest packages. The \texttt{extract\_similarity} function has syntax similar to a \texttt{predict} method and requires as arguments only the fitted random forest object, the new data (for whom comps are to be found) and the reference data (the candidate comps). If the reference data are the same as the training data, then the predictions of the random forest can be recovered as the weighted average of the training outcomes, weighted by similarity score. However, it is also possible to use a different dataset as the reference data; in this case, the similarity is still interpretable as corresponding to the adaptive nearness learned by the random forest. This adaptive nearness is more informative than Euclidean distance because it reflects nearness in ways that are important for predicting outcomes.
+
+The treecomp R package is available at \url{https://github.com/elisabethmill/treecomp}.
+
 \section{Discussion}
 \label{sec:discussion}
 
