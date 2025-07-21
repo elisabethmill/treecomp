@@ -100,7 +100,7 @@ QBR_passing_data <- nfl_data %>%
 QBR_passing_data_combined <- cfb_career_data %>%
   left_join(QBR_passing_data, by = "Player") %>%
   mutate_all(~ replace(., is.na(.), 0)) %>%
-  filter(last_season > 2000) 
+  filter(last_season > 2000, Avg_Att == 0 | !(Avg_Att < 10)) 
 
 set.seed(123)  # For reproducibility
 
