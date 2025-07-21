@@ -38,7 +38,13 @@ data <- treecomp::quarterback %>%
   )
 
 past_data <- data %>%
-  filter(last_season < 2024, c_career_tot_games > 6, c_career_att > 5) %>%
+  filter(
+    last_season < 2024,
+    c_career_tot_games > 6,
+    c_career_att > 5,
+    # Exclude players with very few attempts per season because their QBR will be unstable
+    is.na(Avg_Att) | (Avg_Att == 0) | Avg_Att >= 10
+  ) %>%
   # Remaining NAs are due to not playing in the NFL
   mutate_all(~ replace(., is.na(.), 0))
 
