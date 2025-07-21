@@ -127,7 +127,7 @@ if (verbose) {
   logger::log_info("Downloading NFL QBR data (2006-2024)")
 }
 
-NFL_QBR_by_year <- tibble::tibble()
+nfl_qbr_by_year <- tibble::tibble()
 
 for (year in 2006:2024) {
   if (verbose) {
@@ -153,9 +153,9 @@ for (year in 2006:2024) {
     slice(1) %>%
     ungroup() %>%
     mutate(Season = year) %>%
-    select(Player, Season, Att, QBR)
+    select(player_name = Player, year = Season, att = Att, qbr = QBR)
   
-  NFL_QBR_by_year <- bind_rows(NFL_QBR_by_year, year_data)
+  nfl_qbr_by_year <- bind_rows(nfl_qbr_by_year, year_data)
   
   Sys.sleep(runif(1, 8, 10))
 }
@@ -167,13 +167,13 @@ if (verbose) {
 
 # Join all the data together ----
 
-NFL_QBR_career <- NFL_QBR_by_year %>%
-  group_by(Player) %>%
+nfl_qbr_career <- nfl_qbr_by_year %>%
+  group_by(player_name) %>%
   summarize(
-    nfl_seasons = n(),
-    Career_Att = sum(Att),
-    Avg_Att = mean(Att),
-    mean_QBR = mean(QBR)
+    nfl_years = n(),
+    nfl_att_career = sum(att),
+    nfl_att_per_year = mean(att),
+    nfl_qbr_per_year = mean(qbr)
   )
 
 quarterback <- passing_data %>%
@@ -197,36 +197,36 @@ quarterback <- passing_data %>%
       grepl("H-10", Awards) ~ 10
     )
   ) %>%
-  group_by(Player) %>%
+  group_by(player_name = Player) %>%
   summarize(
-    ncaa_seasons = n(),
-    c_career_tot_games = sum(G),
-    c_career_games = mean(G, na.rm = TRUE),
-    c_career_att = mean(Att, na.rm = TRUE),
-    c_career_cmp = mean(Cmp, na.rm = TRUE),
-    c_career_yds = mean(Yds, na.rm = TRUE),
-    c_career_td = mean(TD, na.rm = TRUE),
-    c_career_int = mean(Int, na.rm = TRUE),
-    c_rush_att = mean(rush_att, na.rm = TRUE),
-    c_rush_yds = mean(rush_yds, na.rm = TRUE),
-    c_rush_td = mean(rush_td, na.rm = TRUE),
-    yds_per_att = sum(Yds) / sum(Att),
-    final_yds_per_att = last(Yds) / last(Att),
-    last_season = last(Season),
-    last_conference = last(Conf),
-    last_college = last(Team),
-    last_sos = last(SOS),
-    last_games = last(G),
-    last_passer_rating = last(Rate),
-    AA = sum(all_american),
-    won_H = sum(won_heisman),
-    last_H_vote = last(heisman_voting)
+    ncaa_years_career = n(),
+    ncaa_games_career = sum(G),
+    ncaa_yds_per_att_career = sum(Yds) / sum(Att),
+    ncaa_games_per_year = mean(G, na.rm = TRUE),
+    ncaa_att_per_year = mean(Att, na.rm = TRUE),
+    ncaa_cmp_per_year = mean(Cmp, na.rm = TRUE),
+    ncaa_yds_per_year = mean(Yds, na.rm = TRUE),
+    ncaa_td_per_year = mean(TD, na.rm = TRUE),
+    ncaa_int_per_year = mean(Int, na.rm = TRUE),
+    ncaa_rush_att_per_year = mean(rush_att, na.rm = TRUE),
+    ncaa_rush_yds_per_year = mean(rush_yds, na.rm = TRUE),
+    ncaa_rush_td_per_year = mean(rush_td, na.rm = TRUE),
+    ncaa_year_last = last(Season),
+    ncaa_conference_last = last(Conf),
+    ncaa_team_last = last(Team),
+    ncaa_sos_last = last(SOS),
+    ncaa_games_last = last(G),
+    ncaa_yds_per_att_last = last(Yds) / last(Att),
+    ncaa_passer_rating_last = last(Rate),
+    ncaa_all_america = sum(all_american),
+    ncaa_heisman = sum(won_heisman),
+    ncaa_heisman_last = last(heisman_voting)
   ) %>%
-  left_join(NFL_QBR_career, by = "Player") %>%
-  filter(last_season > 2000)
+  left_join(nfl_qbr_career, by = "player_name") %>%
+  filter(ncaa_year_last > 2000)
 
 
 # Write data to file ----
 
 save(quarterback, file = "data/quarterback.rda")
-save(NFL_QBR_by_year, file = "data/NFL_QBR_by_year.rda")
+save(nfl_qbr_by_year, file = "data/nfl_qbr_by_year.rda")
