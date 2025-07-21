@@ -10,15 +10,15 @@ set.seed(123)
 
 # Determine mean regression for QBR ----
 
-QBR2_passing_data <- treecomp::NFL_QBR_by_year %>%
-  arrange(Player, Season) %>%
-  group_by(Player) %>%
-  mutate(QBR2 = lead(QBR),
-         QBR2 = ifelse(is.na(QBR2), 0, QBR2)) %>%
-  filter(Season != 2024)
+QBR2_passing_data <- treecomp::nfl_qbr_by_year %>%
+  arrange(player_name, year) %>%
+  group_by(player_name) %>%
+  mutate(qbr_2 = lead(qbr),
+         qbr_2 = ifelse(is.na(qbr_2), 0, qbr_2)) %>%
+  filter(year != 2024)
 
 QBR2_model <- nls(
-  formula = QBR2 ~ (Att * QBR) / (Att + c),
+  formula = qbr_2 ~ (att * qbr) / (att + c),
   data = QBR2_passing_data,
   start = list(c = 1)  # Starting guess for c
 )
@@ -32,18 +32,18 @@ c <- coef(QBR2_model)[1]
 
 data <- treecomp::quarterback %>%
   mutate(
-    reg_QBR = Avg_Att / (Avg_Att + c) * mean_QBR,
+    reg_qbr = nfl_att_per_year / (nfl_att_per_year + c) * nfl_qbr_per_year,
     # NA for Heisman voting means you didn't finish in the top 10
-    last_H_vote = ifelse(is.na(last_H_vote), 11, last_H_vote)
+    ncaa_heisman_last = ifelse(is.na(ncaa_heisman_last), 11, ncaa_heisman_last)
   )
 
 past_data <- data %>%
   filter(
-    last_season < 2024,
-    c_career_tot_games > 6,
-    c_career_att > 5,
-    # Exclude players with very few attempts per season because their QBR will be unstable
-    is.na(Avg_Att) | (Avg_Att == 0) | Avg_Att >= 10
+    ncaa_year_last < 2024,
+    ncaa_games_career > 6,
+    ncaa_att_per_year > 5,
+    # Exclude players with very few NFL attempts per season because their QBR will be unstable
+    is.na(nfl_att_per_year) | (nfl_att_per_year == 0) | nfl_att_per_year >= 10
   ) %>%
   # Remaining NAs are due to not playing in the NFL
   mutate_all(~ replace(., is.na(.), 0))
@@ -56,9 +56,16 @@ test_data <- past_data[-train_indices, ]
 
 # Model tuning
 task_data <- train_data %>%
-  select(c_career_games, c_career_cmp, c_career_att, c_career_yds, c_career_td, c_career_int, last_games, last_passer_rating, AA, last_H_vote, won_H, last_sos, reg_QBR, yds_per_att, final_yds_per_att, c_rush_att, c_rush_yds, c_rush_td)
-task_data$last_sos <- as.numeric(task_data$last_sos)
-task <- makeRegrTask(data = task_data, target = "reg_QBR")
+  select(
+    reg_qbr,
+    ncaa_yds_per_att_career, ncaa_games_per_year,
+    ncaa_att_per_year, ncaa_cmp_per_year, ncaa_yds_per_year, ncaa_td_per_year, ncaa_int_per_year,
+    ncaa_rush_att_per_year, ncaa_rush_yds_per_year, ncaa_rush_td_per_year,
+    ncaa_sos_last, ncaa_games_last, ncaa_yds_per_att_last, ncaa_passer_rating_last,
+    ncaa_all_america, ncaa_heisman, ncaa_heisman_last,
+  )
+task_data$ncaa_sos_last <- as.numeric(task_data$ncaa_sos_last)
+task <- makeRegrTask(data = task_data, target = "reg_qbr")
 
 tuned_model <- tuneRanger(
   task,
@@ -71,21 +78,28 @@ tuned_model <- tuneRanger(
 print(tuned_model)
 
 # Model
-rf_model <- ranger(reg_QBR ~ c_career_games + c_career_cmp + c_career_att + c_career_yds
-                   + c_career_td + c_career_int + last_games + last_passer_rating + AA
-                   + last_H_vote + won_H + last_sos + yds_per_att
-                   + final_yds_per_att + c_rush_att + c_rush_yds + c_rush_td,
-                   data = train_data,
-                   num.trees = 500, importance = "impurity",
-                   keep.inbag = TRUE, min.node.size = 50, mtry = 5)
+rf_model <- ranger(
+  formula = reg_qbr ~
+    ncaa_yds_per_att_career + ncaa_games_per_year +
+    ncaa_att_per_year + ncaa_cmp_per_year + ncaa_yds_per_year + ncaa_td_per_year + ncaa_int_per_year +
+    ncaa_rush_att_per_year + ncaa_rush_yds_per_year + ncaa_rush_td_per_year +
+    ncaa_sos_last + ncaa_games_last + ncaa_yds_per_att_last + ncaa_passer_rating_last +
+    ncaa_all_america + ncaa_heisman + ncaa_heisman_last,
+  data = train_data,
+  num.trees = 500,
+  importance = "impurity",
+  keep.inbag = TRUE,
+  min.node.size = 50,
+  mtry = 5
+)
 
 test_terminal_nodes <- predict(rf_model, data = test_data, type = "terminalNodes")$predictions
 
 test_data$predictions <- predict(rf_model, data = test_data)$predictions
 
-rmse <- sqrt(mean((test_data$reg_QBR - test_data$predictions)^2))
-total_variance <- var(test_data$reg_QBR)
-residuals <- test_data$reg_QBR - test_data$predictions
+rmse <- sqrt(mean((test_data$reg_qbr - test_data$predictions)^2))
+total_variance <- var(test_data$reg_qbr)
+residuals <- test_data$reg_qbr - test_data$predictions
 residual_variance <- var(residuals)
 explained_variance <- total_variance - residual_variance
 print((explained_variance / total_variance) * 100)
@@ -117,7 +131,7 @@ new_plot_data <- past_data %>%
 {
   sputil::open_device("figures/3d_plot.pdf", height = 5)
   plot <- new_plot_data |>
-    ggplot(aes(x = c_career_yds, y = last_passer_rating, color = predictions)) +
+    ggplot(aes(x = ncaa_yds_per_year, y = ncaa_passer_rating_last, color = predictions)) +
     geom_point(size = 1) +
     scale_color_viridis_c() +
     labs(
@@ -134,7 +148,7 @@ new_plot_data <- past_data %>%
 
 {
   sputil::open_device("figures/predicted_vs_actuals.pdf", height = 5, width = 5)
-  plot <- ggplot(new_plot_data, aes(x = predictions, y = reg_QBR)) +
+  plot <- ggplot(new_plot_data, aes(x = predictions, y = reg_qbr)) +
     geom_point() +
     labs(
       title = "Predictions vs. Actuals",
@@ -153,9 +167,12 @@ new_plot_data <- past_data %>%
 # Re-fit random forest on full data set ----
 
 full_rf_model <- ranger(
-  formula = reg_QBR ~ c_career_games + c_career_cmp + c_career_att + c_career_yds + c_career_td +
-    c_career_int + last_games + last_passer_rating + AA + last_H_vote + won_H + last_sos + yds_per_att +
-    final_yds_per_att + c_rush_att + c_rush_yds + c_rush_td,
+  formula = reg_qbr ~
+    ncaa_yds_per_att_career + ncaa_games_per_year +
+    ncaa_att_per_year + ncaa_cmp_per_year + ncaa_yds_per_year + ncaa_td_per_year + ncaa_int_per_year +
+    ncaa_rush_att_per_year + ncaa_rush_yds_per_year + ncaa_rush_td_per_year +
+    ncaa_sos_last + ncaa_games_last + ncaa_yds_per_att_last + ncaa_passer_rating_last +
+    ncaa_all_america + ncaa_heisman + ncaa_heisman_last,
   data = past_data,
   num.trees = 500,
   importance = "impurity",
@@ -165,14 +182,14 @@ full_rf_model <- ranger(
 )
 
 present_data <- data %>%
-  filter(last_season == 2024)
+  filter(ncaa_year_last == 2024)
 
 present_data$predictions <- round(predict(full_rf_model, data = present_data)$predictions, 3)
 
 present_data %>%
-  select(Player, predictions) %>%
+  select(player_name, predictions) %>%
   # Remove draft-ineligible players
-  filter(!Player %in% c("Darian Mensah", "Cade Klubnik", "E.J. Warner")) %>%
+  filter(!player_name %in% c("Darian Mensah", "Cade Klubnik", "E.J. Warner")) %>%
   arrange(-predictions) %>%
   head(10) %>%
   mutate(predictions = sprintf("%.1f", predictions)) %>%
@@ -188,17 +205,17 @@ similarity_matrix <- treecomp::extract_similarity(
 )
 
 similarity_df <- as.data.frame(similarity_matrix)
-colnames(similarity_df) <- past_data$Player  # Name columns by training players
-rownames(similarity_df) <- present_data$Player  # Name rows by test players
+colnames(similarity_df) <- past_data$player_name  # Name columns by training players
+rownames(similarity_df) <- present_data$player_name  # Name rows by test players
 
-ss_index <- which(present_data$Player == "Shedeur Sanders")
+ss_index <- which(present_data$player_name == "Shedeur Sanders")
 
 ss_similarity_scores <- similarity_matrix[ss_index, ]
 
 ss_plot_data <- data.frame(
-  player_name = past_data$Player,
+  player_name = past_data$player_name,
   sim_score = ss_similarity_scores,
-  QBR = past_data$reg_QBR
+  QBR = past_data$reg_qbr
 ) %>%
   filter(sim_score > 0)
 
@@ -229,14 +246,14 @@ ss_plot_data <- data.frame(
   dev.off()
 }
 
-cw_index <- which(present_data$Player == "Cameron Ward")
+cw_index <- which(present_data$player_name == "Cameron Ward")
 
 cw_similarity_scores <- similarity_matrix[cw_index, ]
 
 cw_plot_data <- data.frame(
-  player_name = past_data$Player,
+  player_name = past_data$player_name,
   sim_score = cw_similarity_scores,
-  QBR = past_data$reg_QBR
+  QBR = past_data$reg_qbr
 ) %>%
   filter(sim_score > 0)
 
@@ -266,14 +283,14 @@ cw_plot_data <- data.frame(
   dev.off()
 }
 
-jd_index <- which(present_data$Player == "Jaxson Dart")
+jd_index <- which(present_data$player_name == "Jaxson Dart")
 
 jd_similarity_scores <- similarity_matrix[jd_index, ]
 
 jd_plot_data <- data.frame(
-  player_name = past_data$Player,
+  player_name = past_data$player_name,
   sim_score = jd_similarity_scores,
-  QBR = past_data$reg_QBR
+  QBR = past_data$reg_qbr
 ) %>%
   filter(sim_score > 0)
 
@@ -303,14 +320,14 @@ jd_plot_data <- data.frame(
   dev.off()
 }
 
-dg_index <- which(present_data$Player == "Dillon Gabriel")
+dg_index <- which(present_data$player_name == "Dillon Gabriel")
 
 dg_similarity_scores <- similarity_matrix[dg_index, ]
 
 dg_plot_data <- data.frame(
-  player_name = past_data$Player,
+  player_name = past_data$player_name,
   sim_score = dg_similarity_scores,
-  QBR = past_data$reg_QBR
+  QBR = past_data$reg_qbr
 ) %>%
   filter(sim_score > 0)
 
@@ -340,9 +357,9 @@ dg_plot_data <- data.frame(
   dev.off()
 }
 
-cw_index <- which(present_data$Player == "Cameron Ward")
+cw_index <- which(present_data$player_name == "Cameron Ward")
 cw_similarity_scores <- similarity_matrix[cw_index, ]
-cw_similarity_scores <- setNames(cw_similarity_scores, past_data$Player)
+cw_similarity_scores <- setNames(cw_similarity_scores, past_data$player_name)
 sorted_similarity_scores <- sort(cw_similarity_scores, decreasing = TRUE)
 
 cw_top_10 <- data.frame(
@@ -352,9 +369,9 @@ cw_top_10 <- data.frame(
 )
 
 # Jaxson Dart
-jd_index <- which(present_data$Player == "Jaxson Dart")
+jd_index <- which(present_data$player_name == "Jaxson Dart")
 jd_similarity_scores <- similarity_matrix[jd_index, ]
-jd_similarity_scores <- setNames(jd_similarity_scores, past_data$Player)
+jd_similarity_scores <- setNames(jd_similarity_scores, past_data$player_name)
 sorted_similarity_scores <- sort(jd_similarity_scores, decreasing = TRUE)
 
 jd_top_10 <- data.frame(
@@ -364,9 +381,9 @@ jd_top_10 <- data.frame(
 )
 
 # Dillon Gabriel
-dg_index <- which(present_data$Player == "Dillon Gabriel")
+dg_index <- which(present_data$player_name == "Dillon Gabriel")
 dg_similarity_scores <- similarity_matrix[dg_index, ]
-dg_similarity_scores <- setNames(dg_similarity_scores, past_data$Player)
+dg_similarity_scores <- setNames(dg_similarity_scores, past_data$player_name)
 sorted_similarity_scores <- sort(dg_similarity_scores, decreasing = TRUE)
 
 dg_top_10 <- data.frame(
@@ -376,9 +393,9 @@ dg_top_10 <- data.frame(
 )
 
 # Shedeur Sanders
-ss_index <- which(present_data$Player == "Shedeur Sanders")
+ss_index <- which(present_data$player_name == "Shedeur Sanders")
 ss_similarity_scores <- similarity_matrix[ss_index, ]
-ss_similarity_scores <- setNames(ss_similarity_scores, past_data$Player)
+ss_similarity_scores <- setNames(ss_similarity_scores, past_data$player_name)
 sorted_similarity_scores <- sort(ss_similarity_scores, decreasing = TRUE)
 
 ss_top_10 <- data.frame(
