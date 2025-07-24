@@ -209,7 +209,11 @@ present_data %>%
   arrange(-predictions) %>%
   head(10) %>%
   mutate(predictions = sprintf("%.1f", predictions)) %>%
-  sputil::write_latex_table(file = "tables/top_ten.tex")
+  sputil::write_latex_table(
+    file = "tables/top_ten.tex",
+    colnames = c("Player", "Predicted QBR"),
+    align = "l|r"
+  )
 
 
 # Produce similarity figures and tables ----
@@ -438,4 +442,14 @@ ss_top_10_wide <- ss_top_10 %>%
   setNames(c("SS_Player", "SS_Similarity"))
 
 cbind(cw_top_10_wide, ss_top_10_wide, jd_top_10_wide, dg_top_10_wide) %>%
-  sputil::write_latex_table(file = "tables/side_by_side_similarity.tex")
+  sputil::write_latex_table(
+    file = "tables/side_by_side_similarity.tex",
+    colnames = rep(c("Comp", "Score"), times = 4),
+    prefix_rows = "
+      \\multicolumn{2}{c|}{Cam Ward} &
+      \\multicolumn{2}{c|}{Shedeur Sanders} &
+      \\multicolumn{2}{c|}{Jaxson Dart} &
+      \\multicolumn{2}{c}{Dillon Gabriel}
+    ",
+    align = "lr|lr|lr|lr"
+  )
