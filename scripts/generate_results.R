@@ -165,20 +165,19 @@ new_plot_data <- past_data %>%
 {
   sputil::open_device("figures/3d_plot.pdf", height = 5)
   plot <- new_plot_data |>
-    ggplot(aes(x = ncaa_yds_per_year, y = ncaa_passer_rating_last, color = predictions)) +
+    ggplot(aes(x = ncaa_yds_per_year, y = ncaa_sos_last, color = predictions)) +
     geom_point(size = 1) +
     scale_color_viridis_c() +
     labs(
       x = "Passing Yards per Season (College)",
-      y = "Final-Season Passer Rating (College)",
+      y = "Strength of Schedule (College)",
       color = "Predicted QBR"
     ) +
-    coord_cartesian(xlim = c(0, 6000), ylim = c(0, 250)) +
     theme_minimal() +
-    theme(legend.position = "inside", legend.position.inside = c(0.85, 0.25))
+    theme(legend.position = "inside", legend.position.inside = c(0.85, 0.75))
   print(plot)
   dev.off()
-  }
+}
 
 {
   sputil::open_device("figures/predicted_vs_actuals.pdf", height = 5, width = 5)
