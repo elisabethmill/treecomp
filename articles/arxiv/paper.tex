@@ -50,13 +50,19 @@ While past work in sport analytics has attempted to predict draft prospect outco
 \section{Data}
 \label{sec:data}
 
-All data used for this study are publicly available from Sports Reference (\cite{sports_reference_sports_2025}). Our dataset includes 2,114 quarterbacks who played their final season at the NCAA Division I Football Bowl Subdivision (FBS) between 2001 and 2023 (inclusive) who played more than six total games in their careers and attempted more than five passes per season. The data for each player-season include team, conference, strength of schedule, games played, passing statistics (attempts, completions, touchdowns, interceptions), rushing statistics (attempts, yards, touchdowns), and awards (All-America designation, Heisman voting).
+All data used for this study are publicly available from Sports Reference (\cite{sports_reference_sports_2025}). Our dataset includes 2,099 quarterbacks who played their final season at the NCAA Division I Football Bowl Subdivision (FBS) between 2001 and 2023 (inclusive) who played more than six total games in their careers and attempted more than five passes per season. The data for each player-season include team, conference, strength of schedule, games played, passing statistics (attempts, completions, touchdowns, interceptions), rushing statistics (attempts, yards, touchdowns), and awards (All-America designation, Heisman voting).
 
 In addition to college statistics, we obtained each player's passing attempts and Total Quarterback Rating (QBR) (\cite{burke_how_2016}) from each season between 2006 and 2024 (inclusive). Only available since 2006, QBR is based on expected points added (EPA), which is the change in drive scoring expectation before and after each play. It considers each quarterback's share of their team's EPA and accounts for home-field advantage, defensive strength, and garbage time. The range of QBR is from 0 to 100, and \textcite{burke_how_2016} suggests thinking of it as a percentile of performance at the individual game level. For each quarterback, we calculate their average QBR per season, and we define a player who has attempted fewer than 10 career NFL passes to have a QBR of zero. Here the scale of QBR is helpful because players who reach the NFL cannot be rated below players who never reach the NFL. 
 
-Since it is possible for a quarterback with very few pass attempts to have a high QBR, we adjusted the average QBR by regressing it toward zero based on attempts per season. We used attempts per season rather than career attempts to prevent discrimination against players who have not yet played many seasons. We used the formula $QBR_{adj}=/frac{avg_att*\bar{QBR}}{avg_att+c}$ for regression, where c is a constant. We used a nonlinear least squares model with a formula of $QBR2~/frac{(Att * QBR)}{(Att + c)}$, where Att is that season's total attempts, QBR is that season's QBR, and QBR2 is the next season's QBR, to find c, resulting in a value of 22.50. 
-
 Average QBR per season is the response variable describing the success of quarterback prospects. In the dataset, 91\% of college quarterbacks achieve zero QBR in the NFL, so the distribution is very right-skewed. Because of the date ranges of the data, we do not calculate QBR perfectly for all of the quarterbacks in our dataset. On one extremes, quarterbacks who finished their college careers in 2001 may have appeared in the NFL but only before 2006. These quarterbacks have a QBR of zero in our dataset. On the other extreme, quarterbacks who finished their college careers in 2023 and have not yet appeared in the NFL may yet do so. These quarterbacks, too, have a QBR of zero in our dataset. This is a limitation of the data.
+
+Another limitation of average QBR per season is that some players put up very high QBR numbers in very small samples (e.g. a QBR of 64.7 on only 26 passing attempts over a full season) and are rated as having very positive outcomes although a more subjective evaluation of their careers would be less positive. To mitigate the effect of this phenomenon, we regress each player's career QBR per season toward zero:
+\begin{equation*}
+  \mbox{QBR}_{\mbox{reg}} = \frac{(\mbox{Attempts / Season}) \cdot (\mbox{Average QBR}) + c \cdot 0}{(\mbox{Attempts / Season}) + c}.
+\end{equation*}
+We chose $c = 20.8$ as this value minimizes the error in predicting a player's next-season QBR when used to regrees current-season QBR.
+
+A response variable such as nflWAR (\cite{yurko_nflwar_2019}) or Sports Reference's Approximate Value could have avoided some of the limitations of QBR, but we were unable to obtain these data for a sufficient sample of players' careers. The primary purpose of the present work (extracting similarity scores to interpret random forest predictions through the lens of player comps) holds regardless of the response variable used.
 
 \section{Methods}
 \label{sec:methods}
@@ -67,7 +73,7 @@ Random forests are a machine learning method typically used for classification o
 
 We trained the random forest model using the R package ranger (\cite{wright_ranger_2015}), which is a fast implementation of the random forest algorithm. The response variable was average QBR per season (zero for players who never appeared in the NFL). The college statistics used as predictor variables were games played per season, completed passes per season, attempted passes per season, passing yards per season, passing yards per attempt, passing touchdowns per season, passing interceptions per season, rushing attempts per season, rushing yards per season, rushing touchdowns per season, number of All-America selections, final-season Hesiman Award voting finish, final-season strength of schedule, final-season games played, final-season passing yards per attempt, and final-season passer efficiency rating.
 
-To train the random forest model, we first implemented a random 70\%/30\% train/test split. We chose $B$ = 500 decision trees, each trained on a bootstramp sample of the data, with replacement. To determine the number of variables to consider at each node and the maximum tree size, we used the R package tuneRanger (\cite{probst_tuneranger_2018}), which uses model-based optimization of out-of-bag prediction error to tune the hyperparameters. After 100 iterations of the tuning algorithm, we estimated the optimal number of variables to consider at each node to be 3 and the optimal minimum node size to be 21.
+To train the random forest model, we first implemented a random 70\%/30\% train/test split. We chose $B$ = 1,000 decision trees, each trained on a bootstramp sample of the data, with replacement. To determine the number of variables to consider at each node and the maximum tree size, we used the R package tuneRanger (\cite{probst_tuneranger_2018}), which uses model-based optimization of out-of-bag prediction error to tune the hyperparameters. After 100 iterations of the tuning algorithm, we estimated the optimal number of variables to consider at each node to be 5 and the optimal minimum node size to be 73.
 
 \subsection{Similarity Score}
 
@@ -106,7 +112,7 @@ Note that the similarity score is not symmetric. In general, $\bar w_{0,i} \ne \
 
 \subsection{Random Forest}
 
-Figure \ref{fig:importance} shows the importance of each feature learned by the random forest model. The model's test RMSE was 8.61 units of QBR, corresponding to explaining 33.3\% of the variance of QBR in the test set. Average yards per season, completions per season and touchdowns per season in college stand out as the most important predictors of NFL success. Note that these three variables are highly correlated with each other---each pairwise correlation is at least 0.94. The next most important variables are final-season Heisman voting, average passing attempts per season and final-season passer rating.
+Figure \ref{fig:importance} shows the importance of each feature learned by the random forest model. The model's test RMSE was 8.61 units of QBR, corresponding to explaining 43.7\% of the variance of QBR in the test set. Final-season Heisman voting, average passing performance (yards, touchdowns, completions) per season, and final-season strength of schedule stand out as the most important predictors of NFL success. Note that yards per season, touchdowns per season, and completions per season are highly correlated with each other---each pairwise correlation is at least 0.94.
 
 \begin{figure}[H]
     \centering
@@ -117,7 +123,7 @@ Figure \ref{fig:importance} shows the importance of each feature learned by the 
 
 Figure \ref{fig:3d-plot} visualizes the prediction function learned by the random forest by plotting predicted adjusted QBR against career passing yards per season and final-season passer rating. These are two of the most important predictors in the model, and they have a relatively low correlation. The extreme outlier by passing yards per season is Bailey Zappe, who played only one FBS season at Western Kentucky in Conference USA and was selected by the New England Patriots in the fourth round of the 2022 NFL Draft. The predictions of the random forest model are conservative, with extremely few quarterbacks predicted to exceed an adjusted QBR of 40. This speaks to the large number of college quarterbacks who achieve zero QBR in the NFL and the difficulty of distinguishing between prospects based on college performance statistics alone.
 
-\begin{figure}[H]
+\begin{figure}
     \centering
     \includegraphics[width=0.75\linewidth]{../../figures/3d_plot.pdf}
     \caption{\textit{Predicted adjusted QBR plotted against average passing yards per season and final-season passer rating.}}
@@ -140,7 +146,7 @@ Table \ref{tab:top-ten} shows the adjusted QBR predictions for the top 10 predic
 \begin{table}[H]
   \centering
   \input{../../tables/top_ten.tex}
-  \caption{\textit{Top ten career-average adjusted QBR predictions for quarterback prospects in the 2025 draft class. This includes only draft-eligible players who played at an NCAA Division I FBS school during the 2024 season.}}
+  \caption{\textit{Top ten career-average adjusted QBR predictions for quarterback prospects in the 2025 draft class. This includes draft-eligible players who played at an NCAA Division I FBS school during the 2024 season.}}
   \label{tab:top-ten}
 \end{table}
 
