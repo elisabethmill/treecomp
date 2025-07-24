@@ -64,7 +64,7 @@ task_data <- train_data %>%
     ncaa_att_per_year, ncaa_cmp_per_year, ncaa_yds_per_year, ncaa_td_per_year, ncaa_int_per_year,
     ncaa_rush_att_per_year, ncaa_rush_yds_per_year, ncaa_rush_td_per_year,
     ncaa_sos_last, ncaa_games_last, ncaa_yds_per_att_last, ncaa_passer_rating_last,
-    ncaa_all_america, ncaa_heisman, ncaa_heisman_last,
+    ncaa_all_america, ncaa_heisman, ncaa_heisman_last
   )
 task_data$ncaa_sos_last <- as.numeric(task_data$ncaa_sos_last)
 task <- makeRegrTask(data = task_data, target = "reg_qbr")
@@ -123,9 +123,27 @@ full_rf_model <- ranger(
 
 # Model plots
 importance_scores <- importance(full_rf_model)
-names(importance_scores) <- c("games/season", "completions/season", "attempts/season", "yards/season", "touchdowns/season", "interceptions/season", "final season games", "final season passer rating", "All-American seasons", "final season Heisman voting", "won Heisman Award", "final season strength of schedule", "yards/attempt", "final season yards/attempt", "rushing attempts/season", "rushing yards/season", "rushing touchdowns/season")
+variable_display <- c(
+  ncaa_yds_per_att_career = "Career Yds/Att",
+  ncaa_games_per_year = "Games/Season",
+  ncaa_att_per_year = "Attempts/Season",
+  ncaa_cmp_per_year = "Completions/Season",
+  ncaa_yds_per_year = "Yards/Season",
+  ncaa_td_per_year = "Touchdowns/Season",
+  ncaa_int_per_year = "Interceptions/Season",
+  ncaa_rush_att_per_year = "Rush Attempts/Season",
+  ncaa_rush_yds_per_year = "Rush Yards/Season",
+  ncaa_rush_td_per_year = "Rush Touchdowns/Season",
+  ncaa_sos_last = "Final Strength of Schedule",
+  ncaa_games_last = "Final Games",
+  ncaa_yds_per_att_last = "Final Yds/Att",
+  ncaa_passer_rating_last = "Final Passer Rating",
+  ncaa_all_america = "All-America Seasons",
+  ncaa_heisman = "Won Heisman Award",
+  ncaa_heisman_last = "Final Heisman Voting"
+)
 importance_df <- data.frame(
-  Variable = names(importance_scores),
+  Variable = variable_display[names(importance_scores)],
   Importance = importance_scores
 )
 
