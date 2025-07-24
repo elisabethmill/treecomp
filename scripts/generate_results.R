@@ -89,8 +89,8 @@ rf_model <- ranger(
   num.trees = 500,
   importance = "impurity",
   keep.inbag = TRUE,
-  min.node.size = 50,
-  mtry = 5
+  min.node.size = tuned_model$recommended.pars$min.node.size,
+  mtry = tuned_model$recommended.pars$mtry
 )
 
 test_terminal_nodes <- predict(rf_model, data = test_data, type = "terminalNodes")$predictions
@@ -177,8 +177,8 @@ full_rf_model <- ranger(
   num.trees = 500,
   importance = "impurity",
   keep.inbag = TRUE,
-  min.node.size = 50,
-  mtry = 5
+  min.node.size = tuned_model$recommended.pars$min.node.size,
+  mtry = tuned_model$recommended.pars$mtry
 )
 
 present_data <- data %>%
