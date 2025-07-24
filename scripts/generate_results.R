@@ -5,6 +5,8 @@ library(mlr)
 library(ggplot2)
 library(xtable)
 
+num_trees <- 1000
+
 set.seed(123)
 
 
@@ -69,7 +71,7 @@ task <- makeRegrTask(data = task_data, target = "reg_qbr")
 
 tuned_model <- tuneRanger(
   task,
-  num.trees = 500,
+  num.trees = num_trees,
   iters = 100,
   tune.parameters = c("mtry", "min.node.size"),
   parameters = list(replace = TRUE)
@@ -86,7 +88,7 @@ rf_model <- ranger(
     ncaa_sos_last + ncaa_games_last + ncaa_yds_per_att_last + ncaa_passer_rating_last +
     ncaa_all_america + ncaa_heisman + ncaa_heisman_last,
   data = train_data,
-  num.trees = 500,
+  num.trees = num_trees,
   importance = "impurity",
   keep.inbag = TRUE,
   min.node.size = tuned_model$recommended.pars$min.node.size,
@@ -174,7 +176,7 @@ full_rf_model <- ranger(
     ncaa_sos_last + ncaa_games_last + ncaa_yds_per_att_last + ncaa_passer_rating_last +
     ncaa_all_america + ncaa_heisman + ncaa_heisman_last,
   data = past_data,
-  num.trees = 500,
+  num.trees = num_trees,
   importance = "impurity",
   keep.inbag = TRUE,
   min.node.size = tuned_model$recommended.pars$min.node.size,
