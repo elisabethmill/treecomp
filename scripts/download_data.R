@@ -214,7 +214,7 @@ quarterback <- passing_data %>%
     ncaa_year_last = last(Season),
     ncaa_conference_last = last(Conf),
     ncaa_team_last = last(Team),
-    ncaa_sos_last = last(SOS),
+    ncaa_sos_last = as.numeric(last(SOS)),
     ncaa_games_last = last(G),
     ncaa_yds_per_att_last = last(Yds) / last(Att),
     ncaa_passer_rating_last = last(Rate),
