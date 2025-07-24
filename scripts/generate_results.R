@@ -95,10 +95,7 @@ rf_model <- ranger(
   mtry = tuned_model$recommended.pars$mtry
 )
 
-test_terminal_nodes <- predict(rf_model, data = test_data, type = "terminalNodes")$predictions
-
 test_data$predictions <- predict(rf_model, data = test_data)$predictions
-
 rmse <- sqrt(mean((test_data$reg_qbr - test_data$predictions)^2))
 total_variance <- var(test_data$reg_qbr)
 residuals <- test_data$reg_qbr - test_data$predictions
@@ -106,9 +103,26 @@ residual_variance <- var(residuals)
 explained_variance <- total_variance - residual_variance
 print((explained_variance / total_variance) * 100)
 
+
+# Re-fit random forest on full data set ----
+
+full_rf_model <- ranger(
+  formula = reg_qbr ~
+    ncaa_yds_per_att_career + ncaa_games_per_year +
+    ncaa_att_per_year + ncaa_cmp_per_year + ncaa_yds_per_year + ncaa_td_per_year + ncaa_int_per_year +
+    ncaa_rush_att_per_year + ncaa_rush_yds_per_year + ncaa_rush_td_per_year +
+    ncaa_sos_last + ncaa_games_last + ncaa_yds_per_att_last + ncaa_passer_rating_last +
+    ncaa_all_america + ncaa_heisman + ncaa_heisman_last,
+  data = past_data,
+  num.trees = num_trees,
+  importance = "impurity",
+  keep.inbag = TRUE,
+  min.node.size = tuned_model$recommended.pars$min.node.size,
+  mtry = tuned_model$recommended.pars$mtry
+)
+
 # Model plots
-importance_scores <- importance(rf_model)
-importance(rf_model)
+importance_scores <- importance(full_rf_model)
 names(importance_scores) <- c("games/season", "completions/season", "attempts/season", "yards/season", "touchdowns/season", "interceptions/season", "final season games", "final season passer rating", "All-American seasons", "final season Heisman voting", "won Heisman Award", "final season strength of schedule", "yards/attempt", "final season yards/attempt", "rushing attempts/season", "rushing yards/season", "rushing touchdowns/season")
 importance_df <- data.frame(
   Variable = names(importance_scores),
@@ -128,7 +142,7 @@ importance_df <- data.frame(
 }
 
 new_plot_data <- past_data %>%
-  mutate(predictions = predict(rf_model, data = past_data)$predictions)
+  mutate(predictions = predict(full_rf_model, data = past_data)$predictions)
 
 {
   sputil::open_device("figures/3d_plot.pdf", height = 5)
@@ -165,23 +179,6 @@ new_plot_data <- past_data %>%
   dev.off()
 }
 
-
-# Re-fit random forest on full data set ----
-
-full_rf_model <- ranger(
-  formula = reg_qbr ~
-    ncaa_yds_per_att_career + ncaa_games_per_year +
-    ncaa_att_per_year + ncaa_cmp_per_year + ncaa_yds_per_year + ncaa_td_per_year + ncaa_int_per_year +
-    ncaa_rush_att_per_year + ncaa_rush_yds_per_year + ncaa_rush_td_per_year +
-    ncaa_sos_last + ncaa_games_last + ncaa_yds_per_att_last + ncaa_passer_rating_last +
-    ncaa_all_america + ncaa_heisman + ncaa_heisman_last,
-  data = past_data,
-  num.trees = num_trees,
-  importance = "impurity",
-  keep.inbag = TRUE,
-  min.node.size = tuned_model$recommended.pars$min.node.size,
-  mtry = tuned_model$recommended.pars$mtry
-)
 
 present_data <- data %>%
   filter(ncaa_year_last == 2024)
