@@ -16,6 +16,7 @@
 \author[2]{Scott Powers}
 \affil[1]{Department of Kinesiology, Rice University}
 \affil[2]{Department of Sport Management, Rice University}
+\date{August 1, 2025}
 
 \begin{document}
 
@@ -116,7 +117,7 @@ Figure \ref{fig:importance} shows the importance of each feature learned by the 
 
 \begin{figure}
     \centering
-    \includegraphics[width=0.5\linewidth]{../../figures/variable_importance.pdf}
+    \includegraphics[width=0.5\linewidth]{figures/variable_importance.pdf}
     \caption{\it Importance of predictor variables in random forest model. The response variable in this model is regressed NFL QBR, averaged across seasons in a player's career.}
     \label{fig:importance}
 \end{figure}
@@ -125,7 +126,7 @@ Figure \ref{fig:3d-plot} visualizes the prediction function learned by the rando
 
 \begin{figure}
     \centering
-    \includegraphics[width=0.5\linewidth]{../../figures/3d_plot.pdf}
+    \includegraphics[width=0.5\linewidth]{figures/3d_plot.pdf}
     \caption{\it Visualization of prediction function learned by random forest model. Passing yards per season and final-season strength of schedule are two of most important predictor variables in the model. Each point represents one player from the historical training set, and the color corresponds to the player's fitted value.}
     \label{fig:3d-plot}
 \end{figure}
@@ -134,7 +135,7 @@ Figure \ref{fig:predicted-vs-actuals} shows actual vs. predicted QBR for all qua
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.5\linewidth]{../../figures/predicted_vs_actuals.pdf}
+  \includegraphics[width=0.5\linewidth]{figures/predicted_vs_actuals.pdf}
   \caption{\it Predicted and actual (regressed) QBR for all quarterbacks in the dataset. The vast majority (91\%) of actual QBRs are zero, meaning that the points along the x-axis represent 91\% of the data.}
   \label{fig:predicted-vs-actuals}
 \end{figure}
@@ -145,7 +146,7 @@ Table \ref{tab:top-ten} shows the QBR predictions for the top 10 predicted quart
 
 \begin{table}[H]
   \centering
-  \input{../../tables/top_ten.tex}
+  \input{tables/top_ten.tex}
   \caption{\it Top ten career-average QBR predictions for quarterback prospects in the 2025 draft class. This includes draft-eligible players who played at an NCAA Division I FBS school during the 2024 season.}
   \label{tab:top-ten}
 \end{table}
@@ -156,7 +157,7 @@ These four quarterback prospects illustrate the model's interpretability and its
 
 \begin{table}[H]
   \resizebox{\textwidth}{!}{
-    \input{../../tables/side_by_side_similarity.tex}
+    \input{tables/side_by_side_similarity.tex}
   }
   \caption{\it Top ten similarity scores for each of the top four quarterback prospects in the 2025 NFL draft. The similarity score is the contribution made by each historical prospect to the weighted average which constitutes the reference prospect's prediction in the random forest model.}
   \label{tab:side-by-side-similarity}
@@ -168,14 +169,14 @@ Figure \ref{fig:prospect-plots} provides a full breakdown of the random forest p
 
 \begin{figure}[h]
     \centering
-    \includegraphics[width=0.24\linewidth]{../../figures/prospect_histogram_ward.pdf}
-    \includegraphics[width=0.24\linewidth]{../../figures/prospect_histogram_sanders.pdf}
-    \includegraphics[width=0.24\linewidth]{../../figures/prospect_histogram_gabriel.pdf}
-    \includegraphics[width=0.24\linewidth]{../../figures/prospect_histogram_dart.pdf} \\
-    \includegraphics[width=0.24\linewidth]{../../figures/prospect_similarity_ward.pdf}
-    \includegraphics[width=0.24\linewidth]{../../figures/prospect_similarity_sanders.pdf}
-    \includegraphics[width=0.24\linewidth]{../../figures/prospect_similarity_gabriel.pdf}
-    \includegraphics[width=0.24\linewidth]{../../figures/prospect_similarity_dart.pdf}
+    \includegraphics[width=0.24\linewidth]{figures/prospect_histogram_ward.pdf}
+    \includegraphics[width=0.24\linewidth]{figures/prospect_histogram_sanders.pdf}
+    \includegraphics[width=0.24\linewidth]{figures/prospect_histogram_gabriel.pdf}
+    \includegraphics[width=0.24\linewidth]{figures/prospect_histogram_dart.pdf} \\
+    \includegraphics[width=0.24\linewidth]{figures/prospect_similarity_ward.pdf}
+    \includegraphics[width=0.24\linewidth]{figures/prospect_similarity_sanders.pdf}
+    \includegraphics[width=0.24\linewidth]{figures/prospect_similarity_gabriel.pdf}
+    \includegraphics[width=0.24\linewidth]{figures/prospect_similarity_dart.pdf}
     \caption{\it Top: Histogram of training players' regressed QBR values weighted by similarity to the prospect being predicted. The vertical green line annotates each prospect's predicted QBR, which matches the mean of the weighted distribution. Bottom: Scatter plot showing individual similarity scores and regressed QBR for historical prospects.}
     \label{fig:prospect-plots}
 \end{figure}
