@@ -1,0 +1,240 @@
+\documentclass[Review, sageh, times]{sagej} 
+
+\usepackage{amsmath, amsfonts, array, float, graphicx, subcaption, moreverb, url, natbib}
+
+\usepackage[colorlinks, allcolors=blue]{hyperref}
+
+\begin{document}
+
+\runninghead{Millington and Powers}
+
+\title{A comps-based approach for interpreting tree-based predictions with an application to the NFL draft}
+
+\author{Elisabeth Millington\affilnum{1} and Scott Powers\affilnum{2}}
+
+\affiliation{\affilnum{1}Department of Kinesiology, Rice University\\
+\affilnum{2}Department of Sport Management, Rice University}
+
+\corrauth{Scott Powers, 6100 Main St, Houston, TX, 77005}
+
+\email{scott.powers@rice.edu}
+
+\begin{abstract}
+  Random forests are a powerful yet opaque machine learning predictive model. This poses challenges for interpretability, particularly in environments where decisions can be very high-stakes, like professional sports. In this paper, we present a method for interpreting random forest predictions in a sports setting through the lens of player comps. Player comps are a common practice in player scouting, where prospects are evaluated based on their perceived similarity to past players. We can define interpretable similarity scores that quantify how much each training observation contributes to a given prediction by leveraging the connection between random forests and adaptive nearest neighbors. A player's similarity scores can be viewed as quantifiable player comps, and the random forest's prediction can be recovered by taking a weighted average of the outcome variable among those comps, with weights determined by the similarity scores. We apply this methodology to evaluate quarterback prospects in the 2025 National Football League Draft using ESPN's Total Quarterback Rating (QBR) per season. We show that our approach captures meaningful structure in the data while providing interpretability, allowing us to identify comps for top prospects such as Cam Ward, Jaxson Dart, Shedeur Sanders, and Dillon Gabriel.
+\end{abstract}
+
+\keywords{National Football League, interpretable machine learning, draft projections, player comps, random forests, sports analytics}
+
+\maketitle
+
+\section{Introduction}
+
+Random forests are a powerful machine learning prediction model that use the ensemble learning technique of combining multiple decision trees to mitigate overfitting. Each tree is built from a random bootstrap of the data, and the final prediction is determined by either majority tree vote (classification tasks) or averaging the tree responses (regression tasks). Random forests have the flexibility to model many different functional relationships while maintaining robustness to noise and outliers within the data \citep{breiman_random_2001}, which makes them suitable for many real-world applications.
+
+Like other so-called ``black box'' machine learning algorithms, one drawback of the random forest is that the reasons for an individual's prediction can be difficult to interpret. Interpretability is crucial when using a machine learning algorithm because it allows the user to choose the best prediction method and it builds trust for the user in the prediction \citep{ribeiro_why_2016}. This is especially important in sports contexts because executives need to consider non-quantifiable information in their decision-making. The better a user understands how a model arrives at a prediction, the better they can determine how much it is appropriate to adjust the prediction based on subjective information from outside of the model.
+
+Perhaps one of the most important decisions that sports executives make is selecting quarterbacks in the National Football League (NFL) draft. Quarterbacks are the backbone of offensive schemes for every NFL team and are arguably the most important position \citep{hughes_positional_2015}. Due to the nature of the position, trading for or signing a top quarterback during free agency is uncommon, which is why drafting a quarterback with high NFL potential is crucial for team success. Since quarterbacks are highly sought after, talented college quarterbacks with perceived NFL starting potential are typically taken in the first or second round of the draft. In the NFL, this can have significant consequences because the rookie salary scale means large financial commitments to players taken at the top of the draft. In 2025, the slotted contract for No. 1 pick Cam Ward was \$48.4 million over four years, of which \$32.2 million was guaranteed as signing bonus \citep{badenhausen_nfl_2025}.
+
+In traditional scouting for sports, draft prospect discussions and predictions are often based on comparing a current prospect with similar draft prospects in the past. Some of these past draft prospects will have gone on to successful careers, and others will have experienced less success \citep{trapasso_nfl_2025}. Scouts, managers, and coaches can assess NFL potential by comparing prospects to past players with similar collegiate careers. These historical reference players are known colloquially as ``comps'' \citep{jones_nfl_2025}, short for comparables. The simplest example of this line of reasoning is, ``This prospect reminds me most of Player X, and Player X had a successful career, so I think this player will have a successful career,'' effectively a human implementation of the $k$-nearest neighbor ($k$-NN) algorithm, with $k = 1$.
+
+Random forests can be thought of as an adaptive $k$-NN algorithm \citep{lin_random_2006}, with the nearness of neighbors adaptively determined to minimize prediction error. Our work is motivated by this connection between random forests and the traditional lens of player comps. In this paper, we develop methods and software for extracting similarity scores from fitted random forest models such that the prediction for a new data point is the weighted average of the outcomes in the training set, weighted by these similarity scores.
+
+The paper is organized as follows. In Section \ref{sec:data}, we describe a dataset on which we apply our methodology to evaluate NFL draft quarterback prospects, using ESPN's Total Quarterback Rating as the response variable and college statistics as the predictor variables. In Section \ref{sec:methods}, we derive similarity scores from a fitted random forest such that the model's predictions are equal to a similarity-weighted average of the training outcomes. In Section \ref{sec:results}, we interpret the predictions from the NFL quarterback draft prospect random forest model by ranking players from the training set according to their similarity scores induced by the adaptive nearest neighbors interpretation of random forests. In Section \ref{sec:software}, we describe the new R package treecomp for calculating these similarity scores from fitted random forest objects. In Section \ref{sec:discussion}, we summarize the key findings.
+
+\subsection{Related Work}
+
+Previous research has attempted to introduce interpretability to predictions from random forests and other tree-based machine learning algorithms. \citet{petkovic_improving_2018} describe a user-centered approach to reporting random forest results in an interpretable manner. \citet{aria_comparison_2021} compare two different techniques for interpreting the interactions between predictor variables and response variables in random forest models. In a sports context, \citet{ouyang_integration_2024} use Shapley Additive exPlanations (SHAP) values to interpret NBA game outcome predictions from an XGBoost model.
+
+Draft models are common in professional sports, as evaluating prospect talent can be key to success. One example of a draft model that uses ESPN's Total Quarterback Rating as the response variable is \citet{craig_predicting_2021}. They used logistic regression to estimate whether a quarterback would be selected in the draft and used a second regression to estimate that quarterback's NFL performance based on their final season metrics, scout grades, and player height. Their predictions are easy to interpret directly from the logistic regression model. \citet{wolfson_quarterback_2011} use their own metric of net points combined with games played to define NFL success. They estimate a logistic regression model for this metric on a combination of NFL Combine and college statistics, and they use this model to analyze how effectively NFL teams leverage data available when drafting quarterbacks. Again, the logistic regression model results in predictions that are easily interpretable. \citet{berger_jumping_2021} use principal component analysis (PCA) combined with a high-order regression model to evaluate NBA prospects using their college statistics and combine data. The interpretation of the principal components is unclear, resulting in a relatively uninterpretable draft model. \citet{luo_improving_2024} propose a method for improving the way that NHL teams draft players by using both scouting reports and statistics. They use a combination of large language models and ensemble machine learning, which are both opaque in the way that they generate predictions, leading to uninterpretable predictions/reports.
+
+While past work in sport analytics has attempted to predict draft prospect outcomes using interpretable methods (i.e. logistic regression) or machine learning methods with greater predictive accuracy, the novelty of the current work is that we achieve interpretability with a machine learning method. In particular, we tie our novel interpretation of random forest predictions to the concept of comps, which is well understood by scouts and executives in the sports industry. The implementation of our method is available in the R package treecomp, allowing practitioners and researchers to easily apply it to their own fitted random forests.
+
+\section{Data}
+\label{sec:data}
+
+All data used for this study are publicly available from Sports Reference \citep{sports_reference_sports_2025}. Our dataset includes 2,099 quarterbacks who (1) played their final season at the NCAA Division I Football Bowl Subdivision (FBS) between 2001 and 2023 (inclusive); (2) played more than six total games in their careers; and (3) attempted more than five passes per season. The data for each player-season include team, conference, strength of schedule, games played, passing statistics (attempts, completions, touchdowns, interceptions), rushing statistics (attempts, yards, touchdowns), and awards (All-America designation, Heisman voting).
+
+In addition to college statistics, we obtained each player's passing attempts and Total Quarterback Rating (QBR) \citep{burke_how_2016} from each season between 2006 and 2024 (inclusive). Only available since 2006, QBR is based on expected points added (EPA), which is the change in drive scoring expectation before and after each play. It considers each quarterback's share of their team's EPA and accounts for home-field advantage, defensive strength, and garbage time. The range of QBR is from 0 to 100, and \citet{burke_how_2016} suggests thinking of it as a percentile of performance at the individual game level. For each quarterback, we calculate their average QBR across seasons, and we define a player who has attempted fewer than 10 career NFL passes to have a QBR of zero. Here the scale of QBR is helpful because players who reach the NFL cannot be rated below players who never reach the NFL. 
+
+Average QBR per season is the response variable describing the success of quarterback prospects. In the dataset, 91\% of college quarterbacks achieve zero QBR in the NFL, so the distribution is very right-skewed. Because of the date ranges of the data, we do not calculate QBR perfectly for all of the quarterbacks in our dataset. On one extreme, quarterbacks who finished their college careers in 2001 may have appeared in the NFL but only before 2006. These quarterbacks have a QBR of zero in our dataset. On the other extreme, quarterbacks who finished their college careers in 2023 and have not yet appeared in the NFL may yet do so. These quarterbacks, too, have a QBR of zero in our dataset. This is a limitation of the data.
+
+Another limitation of average QBR per season is that some players put up very high QBR numbers in very small samples (e.g., a QBR of 64.7 on only 26 passing attempts over a full season) and are rated as having very positive outcomes although a more subjective evaluation of their careers would be less positive. To mitigate the effect of this phenomenon, we regress each player's career QBR per season toward zero:
+\begin{equation*}
+  \mbox{QBR}_{\mbox{reg}} = \frac{(\mbox{Attempts / Season}) \cdot (\mbox{Average QBR}) + c \cdot 0}{(\mbox{Attempts / Season}) + c}.
+\end{equation*}
+We chose $c = 20.8$ as this value minimizes the error in predicting a player's next-season QBR when used to regress current-season QBR.
+
+A response variable such as nflWAR \citep{yurko_nflwar_2019} or Sports Reference's Approximate Value could have avoided some of the limitations of QBR, but we were unable to obtain these data for a sufficient sample of players' careers. The primary purpose of the present work (extracting similarity scores to interpret random forest predictions through the lens of player comps) holds regardless of the response variable used.
+
+\section{Methods}
+\label{sec:methods}
+
+\subsection{Random Forest}
+
+Random forests are a machine learning method typically used for classification or regression \citep{breiman_random_2001}. The algorithm creates $B$ bootstrap samples of the original data and then estimates a decision tree on each bootstrap sample, randomly choosing at each split a subset of features as candidates. The random forest's prediction is the average of the predictions of the individual trees. By fitting multiple decision trees, random forests generally achieve much lower-variance predictions than individual decision trees. The randomness introduced by the bootstrap resampling of the data and by randomly limiting eligible features at each split drives down the correlation between the trees in the forest, further reducing the variance of the fitted values.
+
+We trained the random forest model using the R package ranger \citep{wright_ranger_2024}, which is a fast implementation of the random forest algorithm. The response variable was average QBR across NFL seasons (zero for players who never appeared in the NFL). The college statistics used as predictor variables were games played per season, attemtped passes per season, complete passes per season, passing yards per season, passing yards per attempt, passing touchdowns per season, passing interceptions per season, rushing attempts per season, rushing yards per season, rushing touchdowns per season, number of All-America selections, final-season Hesiman Award voting finish, final-season strength of schedule, final-season games played, final-season passing yards per attempt, and final-season passer efficiency rating.
+
+To train the random forest model, we first implemented a random 70\%/30\% train/test split. We chose $B$ = 1,000 decision trees, each trained on a bootstramp sample of the data, with replacement. To determine the number of variables to consider at each node and the maximum tree size, we used the R package tuneRanger \citep{probst_tuneranger_2024}, which uses model-based optimization of out-of-bag prediction error to tune the hyperparameters. After 100 iterations of the tuning algorithm, we estimated the optimal number of candidate variables at each split to be 5 and the optimal minimum node size to be 73.
+
+\subsection{Similarity Score}
+
+Our method is motivated by the observation that a random forest is effectively $k$-NN, using neighborhoods adaptively determined to optimize predictive accuracy \citep{lin_random_2006}. In what follows, $\vec x_1, ..., \vec x_n \in \mathbb{R}^p$ represent the feature vectors in the training data, and $y_1, ..., y_n \in \mathbb{R}$ represent the outcome values in the training data. We draw $B$ bootstrap samples of the data indexed by $b \in \{1, ..., B\}$, and we fit a decision tree on each of these samples. We use $n_{b,i}$ to denote the number of times observation $i$ is included in bootstrap sample $b$, and we use $\mathcal{T}_{b,i}$ to denote the terminal node of observation $i$ in decision tree $b$. We use $|\mathcal{T}_{b,i}|$ to denote the number of training observations (with repetition) which belong to $\mathcal{T}_{b,i}$. If observation $i$ is not included in bootstrap sample $b$, then $n_{b,i} = 0$, and we define $\mathcal{T}_{b,i}$ as the terminal node to which observation $i$ would be assigned, according to the rules of decision tree $b$.
+
+From this setup, if we query the model at a new feature vector $\vec x_0 \in \mathbb{R}^p$, then the prediction of decision tree $b$ is given by
+$$
+  \hat{y}_b(\vec x_0) = \sum_{i = 1}^{n} w_{b,0,i} \cdot y_i,
+$$
+where $w_{b,0,i} = \mathbb{I}\{\mathcal{T}_{b,0} = \mathcal{T}_{b,i}\} \cdot n_{b,i} / |\mathcal{T}_{b,0}|$ is the proportion of training data in $\mathcal{T}_{b,0}$ from observation $i$. The weights $w_{b,0,\cdot}$ can be interpreted as defining a local neighborhood around $\vec x_0$ for tree $b$ \citep{lin_random_2006}.
+
+The prediction of the random forest for the feature vector $\vec x_0$ is simply the average of the predictions of the individual trees:
+\begin{equation*}
+  \hat{y}(\vec x_0) = \frac{1}{B} \sum_{b = 1}^B \left(\sum_{i = 1}^{n} w_{b,0,i} \cdot y_i\right),
+\end{equation*}
+which can be rewritten as
+\begin{equation}
+  \label{eqn:rf-as-knn}
+  \hat{y}(\vec x_0) = \sum_{i = 1}^n \bar w_{0,i} \cdot y_i,
+\end{equation}
+where $\bar w_{0,i} = \left(\sum_{b = 1}^B w_{b,0,i}\right) / B$ is the average weight across the trees.
+
+This formulation (\ref{eqn:rf-as-knn}) demonstrates how the random forest can be interpreted as a form of \textit{k}-NN, where the forest itself is a weighted neighborhood scheme and neighborhoods are defined by tree structure rather than distance. The training observations that share a leaf node with $\vec x_0$ in tree $b$ are considered its neighbors. The final prediction results from averaging the results across all trees, where training points that show up more frequently as neighbors receive greater weight.
+
+We take this a step further and emphasize the interpretation of $\bar w_{0,i}$ as the similarity of $\vec x_0$ to $\vec x_i$. Explicitly, this {\it similarity score} is defined as
+\begin{equation}
+  \label{eqn:similarity}
+  \bar w_{0,i} = \frac{1}{B}\sum_{b = 1}^B
+    \frac{n_{b,i}}{|\mathcal{T}_{b,0}|} \cdot \mathbb{I}\{\mathcal{T}_{b,0} = \mathcal{T}_{b,i}\}.
+\end{equation}
+
+The similarity score $\bar w_{0,i}$ can be thought of as describing how similar is observation 0 to observation $i$, with similarity determined adaptively in a meaningful way so as to optimize random forest predictions. In contrast, defining similarity based on Euclidean distance would not put more weight on features which are more important for predicting outcomes. As demonstrated by (\ref{eqn:rf-as-knn}), the similarity score $\bar w_{0,i}$ comes with the nice property that the prediction for $\vec x_0$ is recovered by calculating the weighted average of the outcome values in the training data, using $\bar w_{0,i}$ as the weights. Note that the similarity score is not symmetric. In general, $\bar w_{0,i} \ne \bar w_{i,0}$.
+
+\section{Results}
+\label{sec:results}
+
+\subsection{Random Forest}
+
+Figure \ref{fig:importance} shows the importance of each feature learned by the random forest model. The model's test RMSE was 8.61 units of QBR, corresponding to explaining 43.7\% of the variance of regressed QBR in the test set. Final-season Heisman voting, average passing performance (yards, touchdowns, completions) per season, and final-season strength of schedule stand out as the most important predictors of NFL success. Note that yards per season, touchdowns per season, and completions per season are highly correlated with each other---each pairwise correlation is at least 0.94.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.7\linewidth]{variable_importance.pdf}
+    \caption{\it Importance of predictor variables in random forest model. The response variable in this model is regressed NFL QBR, averaged across seasons in a player's career.}
+    \label{fig:importance}
+\end{figure}
+
+Figure \ref{fig:3d-plot} visualizes the prediction function learned by the random forest, plotting predicted QBR against career passing yards per season and final-season strength of schedule. Stength of schedule is a proxy for the level of competition at which the quarterback played, and we observe that the top predictions correspond to quarterbacks who had great success at high levels of competition. The extreme outlier by passing yards per season is Bailey Zappe, who played only one FBS season at Western Kentucky in Conference USA and was selected by the New England Patriots in the fourth round of the 2022 NFL Draft. The predictions of the random forest model are conservative, with extremely few quarterbacks predicted to exceed a QBR of 40. This speaks to the large number of college quarterbacks who achieve zero QBR in the NFL and the difficulty of distinguishing between prospects based on college performance statistics alone.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.7\linewidth]{3d_plot.pdf}
+    \caption{\it Visualization of prediction function learned by random forest model. Passing yards per season and final-season strength of schedule are two of most important predictor variables in the model. Each point represents one player from the historical training set, and the color corresponds to the player's fitted value.}
+    \label{fig:3d-plot}
+\end{figure}
+
+Figure \ref{fig:predicted-vs-actuals} shows actual vs. predicted QBR for all quarterbacks in the dataset. Recall that 91\% of actual QBRs are zero, which the visualization does not make clear. The errors are very right-skewed, and this further shows why so few college quarterbacks exceed a QBR prediction of 40.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.7\linewidth]{predicted_vs_actuals.pdf}
+  \caption{\it Predicted and actual (regressed) QBR for all quarterbacks in the dataset. The vast majority (91\%) of actual QBRs are zero, meaning that the points along the x-axis represent 91\% of the data.}
+  \label{fig:predicted-vs-actuals}
+\end{figure}
+
+\subsection{Case Study: 2025 NFL Draft}
+
+Table \ref{tab:top-ten} shows the QBR predictions for the top 10 predicted quarterbacks in the 2025 draft. Cam Ward is predicted to have the highest QBR, which matches the common consensus that he was the best quarterback in this draft class and the fact he was taken first overall in the draft. Dillon Gabriel and Shedeur Sanders were projected to have the second- and third-highest QBRs, respectively. While Dillon Gabriel was not previously expected to be drafted as high as Shedeur Sanders, he had a very consistent college career and finished the highest of any quarterback in Heisman voting in 2024. Interestingly, Gabriel (third round) and Sanders (fifth round) were both selected by the Cleveland Browns after Sanders slid surprisingly deep into the draft, as we discuss later. Jaxson Dart's draft stock increased substantially after the Scouting Combine and his pro day.
+
+\begin{table}[H]
+  \centering
+  \input{top_ten.tex}
+  \caption{\it Top ten career-average QBR predictions for quarterback prospects in the 2025 draft class. This includes draft-eligible players who played at an NCAA Division I FBS school during the 2024 season.}
+  \label{tab:top-ten}
+\end{table}
+
+While the predictions are interesting by themselves, the focus of the present work is interpreting how we arrive at them. Table \ref{tab:side-by-side-similarity} reports the ten most similar historical draft prospects for the top four quaterback prospects: Cam Ward, Dillon Gabriel, Shedeur Sanders, and Jaxson Dart. Recall that the similarity scores reported in this table are interpretable as the weight of each historical prospect in the predictions in Table \ref{tab:top-ten}. The highest similarity score for any of these prospects is only 2.3\%. This is a helpful reminder that quarterback career outcomes are noisy and speaks to the fallacy of putting significant stock in a single player comparison. The random forest model learns to spread out the weight across historical players, rather than concentrating a lot of weight in the single most similar player. With access to more granular athleticism data, the weight might concentrate more in fewer comps.
+
+These four quarterback prospects illustrate the model's interpretability and its alignment with real-world outcomes. Sanders and Ward were both initially expected to go in the first round of the 2025 draft. Sanders' draft position unexpectedly slid, and he ended up being taken in the fifth round in the draft. However, this is likely a result of his refusal to participate in the NFL Scouting Combine, coupled with a reported bad attitude in his interviews, rather than his college performance \citep{mckenna_what_2025}. In the end, Dart was the other quarterback taken in the first round of the draft.
+
+\begin{table}[H]
+  \resizebox{\textwidth}{!}{
+    \input{side_by_side_similarity.tex}
+  }
+  \caption{\it Top ten similarity scores for each of the top four quarterback prospects in the 2025 NFL draft. The similarity score is the contribution made by each historical prospect to the weighted average which constitutes the reference prospect's prediction in the random forest model.}
+  \label{tab:side-by-side-similarity}
+\end{table}
+
+It is worth noting that both Ward and Sanders started their college careers at teams that are not in the NCAA Division I FBS, as Ward played his first season at Incarnate Word and Sanders played his first two seasons at Jackson State. As a result, their college statistics used in the model do not include their statistics from these schools. We observe that Ward has the highest QBR prediction, which intuitively makes sense because he is widely regarded as the best quarterback in this year's draft class. Gabriel has a slightly higher QBR prediction than Sanders although Sanders was considered a better prospect. However, Gabriel finished higher than Sanders in Heisman voting, and Oregon had a much better record than Colorado. Dart's relatively low prediction compared to the other three makes sense because he wasn't considered a top quarterback prospect until his performance in the NFL Combine, which this model does not take into consideration. He also performed well in his interviews with teams \citep{traina_qb_2025}, which is not quantifiable.
+
+Figure \ref{fig:prospect-plots} provides a full breakdown of the random forest predictions based on each prospect's similarity scores for all of the historical prospects in the training data. Each prospect's prediction is a weighted average of past prospects' outcomes, and the weighted histograms in Figure \ref{fig:prospect-plots} visualize that weighted mean. We observe that all four of the top quarterback prospects in 2025 have a large concentration of weight on training players with zero QBR, a reminder that even top prospects have a danger of becoming busts. Ward has the highest concentration of comps between 55 and 65 QBR, which is why his prediction is the highest. On the opposite end of the spectrum, Dart has the highest concentration of training players near zero QBR, explaining why his prediction was by far the lowest of the four prospects.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.24\linewidth]{prospect_histogram_ward.pdf}
+    \includegraphics[width=0.24\linewidth]{prospect_histogram_sanders.pdf}
+    \includegraphics[width=0.24\linewidth]{prospect_histogram_gabriel.pdf}
+    \includegraphics[width=0.24\linewidth]{prospect_histogram_dart.pdf} \\
+    \includegraphics[width=0.24\linewidth]{prospect_similarity_ward.pdf}
+    \includegraphics[width=0.24\linewidth]{prospect_similarity_sanders.pdf}
+    \includegraphics[width=0.24\linewidth]{prospect_similarity_gabriel.pdf}
+    \includegraphics[width=0.24\linewidth]{prospect_similarity_dart.pdf}
+    \caption{\it Top: Histogram of training players' regressed QBR values weighted by similarity to the prospect being predicted. The vertical green line annotates each prospect's predicted QBR, which matches the mean of the weighted distribution. Bottom: Scatter plot showing individual similarity scores and regressed QBR for historical prospects.}
+    \label{fig:prospect-plots}
+\end{figure}
+
+\section{Software}
+\label{sec:software}
+
+The primary contribution of the present work is less about the specific application to quarterback prospects in football and more about introducing the concept of extracting similarity scores from random forests to interpret the predictions. To this end, we have published the R package treecomp, which provides a simple function interface for extracting similarity scores from fitted random forest objects. Currently, the package handles fitted random forests from the ranger and randomForest packages. The \texttt{extract\_similarity} function has syntax similar to a \texttt{predict} method and requires as arguments only the fitted random forest object, the new data (for whom comps are to be found) and the reference data (the candidate comps). If the reference data are the same as the training data, then the predictions of the random forest can be recovered as the weighted average of the training outcomes, weighted by similarity score. However, it is also possible to use a different dataset as the reference data; in this case, the similarity is still interpretable as reflecting the adaptive nearness learned by the random forest, which is more informative than a similarity based on Euclidean distance giving equal weight to all features.
+
+The treecomp package is available at \url{https://github.com/elisabethmill/treecomp}.
+
+\section{Discussion}
+\label{sec:discussion}
+
+We have demonstrated a methodology for producing similarity scores to help interpret the predictions of random forests. These similarity scores have the nice property that the random forest predictions are the weighted averages of outcomes in the training set, weighted according to these similarity scores. In addition to interpreting the random forest predictions, the methodology is helpful for identifying similar players based on the interpretation of a random forest as an adaptive $k$-NN algorithm. The neighborhoods are chosen in a meaningful way for predicting outcomes, which is not the case for a standard $k$-NN algorithm based on Euclidean distance. Our methodology is not limited to quarterbacks, to football, or even to sports, although the interpretation of predictions as a weighted average of historical comps fits well with the tradition of using comps in traditional scouting for sports.
+
+In the application to the 2025 NFL draft, the random forest's predictions explain slightly less than half of the out-of-sample variance in regressed QBR, which highlights some limitations of statistical forecasting when scouting draft prospects. The variable importance scores show which college statistics are most predictive of better NFL performance.
+
+The application of predicting the future success of NFL quarterback prospects is an illustration of our methodology, but the primary purpose of this work is to introduce the idea of extracting similarity scores from fitted random forest objects to explain the predictions using the framework of player comps, well known in sports. Importantly, we have published a user-friendly R package called treecomp, which will allow researchers and practitioners to extract similarity scores from their own random forest models. The R package name and the title of this paper refer more generally to tree-based methods, rather than specifically to random forests, and this is intentional. Future work could extend our methodology to other tree-based regression and classification models, such as gradient boosting.
+
+One key strength of this approach to comps is its objectivity. It enables teams to leverage historical data to make comps, without relying solely on scouting narratives or subjective analysis. While this approach should not replace traditional scouting, it can complement the existing strategies and provide additional information to front offices. 
+
+\section{Acknolwedgments}
+
+The authors thank Kevin Meers for suggestions that led to improvements in the random forest model for predicting NFL quarterback prospect success.
+
+\section{Author contributions}
+
+EM downloaded the data, calculated the similarity scores, and drafted the manuscript. SP provided the research idea, converted EM's code into an R package, and revised the manuscript.
+
+
+\section{Statements and Declarations}
+\subsection{Ethical Considerations}
+
+Not applicable
+
+\subsection{Consent to Participate}
+
+Not applicable
+
+\subsection{Consent for Publication}
+
+Not applicable
+
+\subsection{Declaration of Conflicting Interest}
+
+The authors declared no potential conflicts of interest with respect to the research, authorship, and/or publication of this article.
+
+\subsection{Funding Statement}
+
+The authors received no financial support for the research, authorship, and/or publication of this article.
+
+\subsection{Code and Data Availability}
+
+The data used for this paper are included in the R package treecomp, which is available at \url{https://github.com/elisabethmill/treecomp}. The repository also includes code for reproducing the results in this paper.
+
+\bibliographystyle{SageH}
+\bibliography{random-forest-comps}
+
+\end{document}
