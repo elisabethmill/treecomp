@@ -262,11 +262,10 @@ quarterback <- passing_data %>%
   left_join(nfl_qbr_career, by = "player_name") %>%
   filter(ncaa_year_last > 2000)
 
-nfl_draft_qbr_data <- nfl_qbr_by_year %>%
+nfl_qbr_by_year <- nfl_qbr_by_year %>%
   group_by(player_name) %>%
   left_join(draft_year, by = "player_name")
 
 # Write data to file ----
-save(nfl_draft_qbr_data, file = "data/nfl_draft_qbr_data.rda")
 save(quarterback, file = "data/quarterback.rda")
 save(nfl_qbr_by_year, file = "data/nfl_qbr_by_year.rda")

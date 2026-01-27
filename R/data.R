@@ -43,12 +43,14 @@
 #' NFL quarterback performance by year according to ESPN's Total Quarterback Rating, 2006-2024.
 #' 
 #' @format ## `nfl_qbr_by_year`
-#' A data frame with 1,386 rows and 4 columns:
+#' A data frame with 1,386 rows and 6 columns:
 #' \describe{
 #'   \item{Player}{Player name}
 #'   \item{Season}{Year}
 #'   \item{Att}{Total attempts}
 #'   \item{QBR}{Total Quarterback Rating}
+#'   \item{GS}{Games Started}
+#'   \item{draft_year}{Year Drafted into NFL}
 #' }
 #' 
 #' @source <https://www.pro-football-reference.com/years/2024/passing.htm>
