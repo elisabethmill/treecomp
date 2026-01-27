@@ -7,5 +7,5 @@ Random forests are a powerful yet opaque machine learning predictive model. This
 ## Installation
 
 ```R
-devtools::install_github("elisabethmil/treecomp")
+devtools::install_github("elisabethmill/treecomp")
 ```
