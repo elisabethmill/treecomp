@@ -15,7 +15,7 @@ for (year in 1997:2024) {
   if (verbose) {
     cat(year, "")
   }
-
+  
   url <- paste0("https://www.sports-reference.com/cfb/years/", year, "-passing.html")
   
   page <- read_html(url)
@@ -54,7 +54,7 @@ for (year in 2000:2024) {
   if (verbose) {
     cat(year, "")
   }
-
+  
   url <- paste0("https://www.sports-reference.com/cfb/years/", year, "-rushing.html")
   
   page <- read_html(url)
@@ -97,7 +97,7 @@ for (year in 2000:2024) {
   if (verbose) {
     cat(year, "")
   }
-
+  
   url <- paste0("https://www.sports-reference.com/cfb/years/", year, "-standings.html")
   
   page <- read_html(url)
@@ -108,9 +108,9 @@ for (year in 2000:2024) {
   
   colnames(raw_data) <- raw_data[2, ]
   year_data <- raw_data[-c(1, 2), c(2, 13)] %>%
-   filter(!School %in% c("", "School")) %>%   # remove header rows
-   mutate(Team = School, Season = year) %>%
-   select(Season, Team, SOS)
+    filter(!School %in% c("", "School")) %>%   # remove header rows
+    mutate(Team = School, Season = year) %>%
+    select(Season, Team, SOS)
   
   schedule_strength <- bind_rows(schedule_strength, year_data)
   
@@ -121,6 +121,43 @@ if (verbose) {
 }
 
 
+
+# Download NFL draft year data ----
+if (verbose) {
+  logger::log_info("Downloading NFL draft year data (2000-2024)")
+}
+draft_year <- tibble::tibble()
+
+for (year in 2000:2024) {
+  if (verbose) {
+    cat(year, "")
+  }
+  
+  url <- paste0("https://www.pro-football-reference.com/years/", year, "/draft.htm")
+  
+  page <- read_html(url)
+  
+  raw_data <- page %>%
+    html_nodes("table") %>%
+    .[[1]] %>%
+    html_table(header = FALSE, fill = TRUE)
+  
+  colnames(raw_data) <- raw_data[2, ]
+  raw_data <- raw_data[-c(1,2), ]
+  
+  year_data <- raw_data %>%
+    select(Player, Pos) %>%
+    filter(Pos == "QB") %>%
+    mutate(Season = year) %>%
+    select(player_name = Player, draft_year = Season)
+  
+  draft_year <- bind_rows(draft_year, year_data)
+  
+  Sys.sleep(runif(1, 8, 10))
+}
+if (verbose) {
+  cat("\n")
+}
 
 # Download NFL QBR data ----
 if (verbose) {
@@ -133,7 +170,7 @@ for (year in 2006:2024) {
   if (verbose) {
     cat(year, "")
   }
-
+  
   url <- paste0("https://www.pro-football-reference.com/years/", year, "/passing.htm")
   
   page <- read_html(url)
@@ -142,9 +179,9 @@ for (year in 2006:2024) {
     html_nodes("table") %>%
     .[[1]] %>%
     html_table(fill = TRUE)
-
+  
   year_data <- raw_data %>%
-    select(Player, Pos, QBR, Att) %>%
+    select(Player, Pos, QBR, Att, GS) %>%
     filter(Pos == "QB", !is.na(QBR)) %>%
     # If a QB plays for multiple teams, they get a row for each team as well as a "total" row.
     # Below, we select the row with the most attempts for each player, which should be the "total".
@@ -153,7 +190,7 @@ for (year in 2006:2024) {
     slice(1) %>%
     ungroup() %>%
     mutate(Season = year) %>%
-    select(player_name = Player, year = Season, att = Att, qbr = QBR)
+    select(player_name = Player, year = Season, att = Att, qbr = QBR, games_started = GS)
   
   nfl_qbr_by_year <- bind_rows(nfl_qbr_by_year, year_data)
   
@@ -174,7 +211,7 @@ nfl_qbr_career <- nfl_qbr_by_year %>%
     nfl_att_career = sum(att),
     nfl_att_per_year = mean(att),
     nfl_qbr_per_year = mean(qbr)
-  )
+  ) 
 
 quarterback <- passing_data %>%
   left_join(rushing_data, by = c("Player", "Season", "Team")) %>%
@@ -225,8 +262,11 @@ quarterback <- passing_data %>%
   left_join(nfl_qbr_career, by = "player_name") %>%
   filter(ncaa_year_last > 2000)
 
+nfl_draft_qbr_data <- nfl_qbr_by_year %>%
+  group_by(player_name) %>%
+  left_join(draft_year, by = "player_name")
 
 # Write data to file ----
-
+save(nfl_draft_qbr_data, file = "data/nfl_draft_qbr_data.rda")
 save(quarterback, file = "data/quarterback.rda")
 save(nfl_qbr_by_year, file = "data/nfl_qbr_by_year.rda")
