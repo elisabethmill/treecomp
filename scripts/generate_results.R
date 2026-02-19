@@ -853,9 +853,7 @@ get_top10_comps_side_by_side <- function(target_name,
     ) %>%
     transmute(
       !!paste0(player_initials, "_class_name") := cls_player,
-      !!paste0(player_initials, "_class_score") := paste0(sprintf("%.1f", 100 * cls_sim), "\\%"),
-      !!paste0(player_initials, "_rgr_name") := rgr_player,
-      !!paste0(player_initials, "_rgr_score") := paste0(sprintf("%.1f", 100 * rgr_sim), "\\%")
+      !!paste0(player_initials, "_class_score") := paste0(sprintf("%.1f", 100 * cls_sim), "\\%")
     )
 }
 
@@ -877,8 +875,8 @@ ts_df <- get_top10_comps_side_by_side("Tyler Shough", "TS", similarity_matrix_cl
 
 cbind(cw_df, dg_df, ss_df, jd_df, ts_df) %>%
   sputil::write_latex_table(
-    file = "tables/side_by_side_similarity_cls_rgr.tex",
-    colnames = rep(c("Cls Comp", "Cls Score", "Rgr Comp", "Rgr Score"), times = 5),
+    file = "tables/side_by_side_similarity.tex",
+    colnames = rep(c("Comp", "Score"), times = 5),
     prefix_rows = "
       \\multicolumn{4}{c|}{Cam Ward} &
       \\multicolumn{4}{c|}{Dillon Gabriel} &
@@ -886,6 +884,6 @@ cbind(cw_df, dg_df, ss_df, jd_df, ts_df) %>%
       \\multicolumn{4}{c|}{Jaxson Dart} &
       \\multicolumn{4}{c}{Tyler Shough}
     ",
-    align = "lrlr|lrlr|lrlr|lrlr|lrlr"
+    align = "lr|lr|lr|lr|lr"
   )
   
