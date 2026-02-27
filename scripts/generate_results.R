@@ -626,196 +626,59 @@ similarity_df_rgr <- as.data.frame(similarity_matrix_rgr)
 colnames(similarity_df_rgr) <- qbr_data$player_name  # Name columns by training players
 rownames(similarity_df_rgr) <- present_data$player_name  # Name rows by test players
 
-ss_index <- which(present_data$player_name == "Shedeur Sanders")
-
-ss_similarity_scores <- similarity_matrix_rgr[ss_index, ]
-
-ss_plot_data <- data.frame(
-  player_name = qbr_data$player_name,
-  sim_score = ss_similarity_scores,
-  QBR = qbr_data$reg_qbr
-) %>%
-  filter(sim_score > 0)
-
-{
-  sputil::open_device("figures/prospect_histogram_sanders.pdf", height = 3, width = 3)
-  plot <- ggplot(ss_plot_data, aes(x = QBR, y = ..density.., weight = sim_score)) +
-    geom_histogram(binwidth = 5, color = "blue", fill = "blue", alpha = 0.8) +
-    theme_minimal() +
-    labs(x = "QBR", y = "Weights",
-         title = "Shedeur Sanders") +
-    geom_vline(aes(xintercept = present_data[ss_index, ]$predictions), 
-               color = "green") +
-    coord_cartesian(ylim = c(0, 0.08))
-  print(plot)
-  dev.off()
+get_prospect_plots <- function(player, present_data, similarity_matrix_rgr,
+                               qbr_data, player_last_name) {
+  index <- which(present_data$player_name == player)
+  
+  similarity_scores <- similarity_matrix_rgr[index, ]
+  
+  plot_data <- data.frame(
+    player_name = qbr_data$player_name,
+    sim_score = similarity_scores,
+    QBR = qbr_data$reg_qbr
+  ) %>%
+    filter(sim_score > 0)
+  
+  {
+    sputil::open_device(paste0("figures/prospect_histogram_", player_last_name, ".pdf"), height = 3, width = 3)
+    plot <- ggplot(plot_data, aes(x = QBR, y = ..density.., weight = sim_score)) +
+      geom_histogram(binwidth = 5, color = "blue", fill = "blue", alpha = 0.8) +
+      theme_minimal() +
+      labs(x = "QBR", y = "Weights",
+           title = player) +
+      geom_vline(aes(xintercept = present_data[index, ]$predictions), 
+                 color = "green") +
+      coord_cartesian(ylim = c(0, 0.08))
+    print(plot)
+    dev.off()
+    }
+  
+  {
+    sputil::open_device(paste0("figures/prospect_similarity_", player_last_name, ".pdf"), height = 3, width = 3)
+    plot <- ggplot(plot_data, aes(x = QBR, y = sim_score)) +
+      geom_point() +
+      ggtitle(player) +
+      xlab("Training Player QBR Value") +
+      ylab("Training Player Similarity Score") +
+      coord_cartesian(ylim = c(0, 0.03)) +
+      theme_minimal()
+    print(plot)
+    dev.off()
   }
-
-{
-  sputil::open_device("figures/prospect_similarity_sanders.pdf", height = 3, width = 3)
-  plot <- ggplot(ss_plot_data, aes(x = QBR, y = sim_score)) +
-    geom_point() +
-    ggtitle("Shedeur Sanders") +
-    xlab("Training Player QBR Value") +
-    ylab("Training Player Similarity Score") +
-    coord_cartesian(ylim = c(0, 0.03)) +
-    theme_minimal()
-  print(plot)
-  dev.off()
 }
 
-cw_index <- which(present_data$player_name == "Cameron Ward")
-
-cw_similarity_scores <- similarity_matrix_rgr[cw_index, ]
-
-cw_plot_data <- data.frame(
-  player_name = qbr_data$player_name,
-  sim_score = cw_similarity_scores,
-  QBR = qbr_data$reg_qbr
-) %>%
-  filter(sim_score > 0)
-
-{
-  sputil::open_device("figures/prospect_histogram_ward.pdf", height = 3, width = 3)
-  plot <- ggplot(cw_plot_data, aes(x = QBR, y = ..density.., weight = sim_score)) +
-    geom_histogram(binwidth = 5, color = "blue", fill = "blue", alpha = 0.8) +
-    theme_minimal() +
-    labs(x = "QBR", y = "Weights", title = "Cam Ward") +
-    geom_vline(aes(xintercept = present_data[cw_index, ]$predictions), 
-               color = "green") +
-    coord_cartesian(ylim = c(0, 0.08))
-  print(plot)
-  dev.off()
-  }
-
-{
-  sputil::open_device("figures/prospect_similarity_ward.pdf", height = 3, width = 3)
-  plot <- ggplot(cw_plot_data, aes(x = QBR, y = sim_score)) +
-    geom_point() +
-    ggtitle("Cam Ward") +
-    xlab("Training Player QBR Value") +
-    ylab("Training Player Similarity Score") +
-    coord_cartesian(ylim = c(0, 0.03)) +
-    theme_minimal()
-  print(plot)
-  dev.off()
-}
-
-jd_index <- which(present_data$player_name == "Jaxson Dart")
-
-jd_similarity_scores <- similarity_matrix_rgr[jd_index, ]
-
-jd_plot_data <- data.frame(
-  player_name = qbr_data$player_name,
-  sim_score = jd_similarity_scores,
-  QBR = qbr_data$reg_qbr
-) %>%
-  filter(sim_score > 0)
-
-{
-  sputil::open_device("figures/prospect_histogram_dart.pdf", height = 3, width = 3)
-  plot <- ggplot(jd_plot_data, aes(x = QBR, y = ..density.., weight = sim_score)) +
-    geom_histogram(binwidth = 5, color = "blue", fill = "blue", alpha = 0.8) +
-    theme_minimal() +
-    labs(x = "QBR", y = "Weights", title = "Jaxson Dart") +
-    geom_vline(aes(xintercept = present_data[jd_index, ]$predictions),
-               color = "green") +
-    coord_cartesian(ylim = c(0, 0.08))
-  print(plot)
-  dev.off()
-  }
-
-{
-  sputil::open_device("figures/prospect_similarity_dart.pdf", height = 3, width = 3)
-  plot <- ggplot(jd_plot_data, aes(x = QBR, y = sim_score)) +
-    geom_point() +
-    ggtitle("Jaxson Dart") +
-    xlab("Training Player QBR Value") +
-    ylab("Training Player Similarity Score") +
-    coord_cartesian(ylim = c(0, 0.03)) +
-    theme_minimal()
-  print(plot)
-  dev.off()
-}
-
-dg_index <- which(present_data$player_name == "Dillon Gabriel")
-
-dg_similarity_scores <- similarity_matrix_rgr[dg_index, ]
-
-dg_plot_data <- data.frame(
-  player_name = qbr_data$player_name,
-  sim_score = dg_similarity_scores,
-  QBR = qbr_data$reg_qbr
-) %>%
-  filter(sim_score > 0)
-
-{
-  sputil::open_device("figures/prospect_histogram_gabriel.pdf", height = 3, width = 3)
-  plot <- ggplot(dg_plot_data, aes(x = QBR, y = ..density.., weight = sim_score)) +
-    geom_histogram(binwidth = 5, color = "blue", fill = "blue", alpha = 0.8) +
-    theme_minimal() +
-    labs(x = "QBR", y = "Weights", title = "Dillon Gabriel") +
-    geom_vline(aes(xintercept = present_data[dg_index, ]$predictions),
-               color = "green") +
-    coord_cartesian(ylim = c(0, 0.08))
-  print(plot)
-  dev.off()
-  }
-
-{
-  sputil::open_device("figures/prospect_similarity_gabriel.pdf", height = 3, width = 3)
-  plot <- ggplot(dg_plot_data, aes(x = QBR, y = sim_score)) +
-    geom_point() +
-    ggtitle("Dillon Gabriel") +
-    xlab("Training Player QBR Value") +
-    ylab("Training Player Similarity Score") +
-    coord_cartesian(ylim = c(0, 0.03)) +
-    theme_minimal()
-  print(plot)
-  dev.off()
-}
-
-ts_index <- which(present_data$player_name == "Tyler Shough")
-
-ts_similarity_scores <- similarity_matrix_rgr[ts_index, ]
-
-ts_plot_data <- data.frame(
-  player_name = qbr_data$player_name,
-  sim_score = dg_similarity_scores,
-  QBR = qbr_data$reg_qbr
-) %>%
-  filter(sim_score > 0)
-
-{
-  sputil::open_device("figures/prospect_histogram_shough.pdf", height = 3, width = 3)
-  plot <- ggplot(ts_plot_data, aes(x = QBR, y = ..density.., weight = sim_score)) +
-    geom_histogram(binwidth = 5, color = "blue", fill = "blue", alpha = 0.8) +
-    theme_minimal() +
-    labs(x = "QBR", y = "Weights", title = "Tyler Shough") +
-    geom_vline(aes(xintercept = present_data[dg_index, ]$predictions),
-               color = "green") +
-    coord_cartesian(ylim = c(0, 0.08))
-  print(plot)
-  dev.off()
-  }
-
-{
-  sputil::open_device("figures/prospect_similarity_shough.pdf", height = 3, width = 3)
-  plot <- ggplot(ts_plot_data, aes(x = QBR, y = sim_score)) +
-    geom_point() +
-    ggtitle("Tyler Shough") +
-    xlab("Training Player QBR Value") +
-    ylab("Training Player Similarity Score") +
-    coord_cartesian(ylim = c(0, 0.03)) +
-    theme_minimal()
-  print(plot)
-  dev.off()
-}
+get_prospect_plots("Cameron Ward", present_data, similarity_matrix_rgr,
+                    qbr_data, "ward")
+get_prospect_plots("Shedeur Sanders", present_data, similarity_matrix_rgr,
+                   qbr_data, "sanders")
+get_prospect_plots("Jaxson Dart", present_data, similarity_matrix_rgr,
+                   qbr_data, "dart")
+get_prospect_plots("Tyler Shough", present_data, similarity_matrix_rgr,
+                   qbr_data, "shough")
 
 
 get_top10_comps_side_by_side <- function(target_name,
                                          player_initials,
-                                         similarity_matrix_cls,
                                          similarity_matrix_rgr,
                                          present_data,
                                          past_data,
@@ -825,16 +688,6 @@ get_top10_comps_side_by_side <- function(target_name,
   idx <- match(target_name, present_data$player_name)
   if (is.na(idx)) stop("target_name not found in present_data$player_name")
   
-  cls_top10 <- tibble(
-    cls_player = past_data$player_name,
-    cls_sim    = as.numeric(similarity_matrix_cls[idx, , drop = TRUE]),
-    cls_played_nfl    = past_data[["played_nfl"]]
-  ) %>%
-    filter(cls_sim > 0) %>%
-    arrange(desc(cls_sim)) %>%
-    slice_head(n = 10) %>%
-    mutate(rank = row_number())
-  
   rgr_top10 <- tibble(
     rgr_player = qbr_data$player_name,
     rgr_sim    = as.numeric(similarity_matrix_rgr[idx, , drop = TRUE]),
@@ -843,47 +696,84 @@ get_top10_comps_side_by_side <- function(target_name,
     filter(rgr_sim > 0) %>%
     arrange(desc(rgr_sim)) %>%
     slice_head(n = 10) %>%
-    mutate(rank = row_number())
-  
-  full_join(cls_top10, rgr_top10, by = "rank") %>%
+    mutate(rank = row_number()) %>%
     select(
-      rank,
-      cls_player, cls_sim, cls_played_nfl,
-      rgr_player, rgr_sim, rgr_qbr
+      rank, rgr_player, rgr_sim, rgr_qbr
     ) %>%
     transmute(
-      !!paste0(player_initials, "_class_name") := cls_player,
-      !!paste0(player_initials, "_class_score") := paste0(sprintf("%.1f", 100 * cls_sim), "\\%")
+      !!paste0(player_initials, "_name") := rgr_player,
+      !!paste0(player_initials, "_score") := paste0(sprintf("%.1f", 100 * rgr_sim), "\\%")
     )
 }
 
-cw_df <- get_top10_comps_side_by_side("Cameron Ward", "CW", similarity_matrix_cls,
-                                      similarity_matrix_rgr, present_data, past_data,
-                                      qbr_data) 
-dg_df <- get_top10_comps_side_by_side("Dillon Gabriel", "DG", similarity_matrix_cls,
-                                      similarity_matrix_rgr, present_data, past_data,
-                                      qbr_data) 
-ss_df <- get_top10_comps_side_by_side("Shedeur Sanders", "SS", similarity_matrix_cls,
-                                      similarity_matrix_rgr, present_data, past_data,
-                                      qbr_data) 
-jd_df <- get_top10_comps_side_by_side("Jaxson Dart", "JD", similarity_matrix_cls,
-                                      similarity_matrix_rgr, present_data, past_data,
-                                      qbr_data) 
-ts_df <- get_top10_comps_side_by_side("Tyler Shough", "TS", similarity_matrix_cls,
-                                      similarity_matrix_rgr, present_data, past_data,
-                                      qbr_data) 
+cw_df <- get_top10_comps_side_by_side("Cameron Ward", "CW", similarity_matrix_rgr, 
+                                      present_data, past_data, qbr_data) 
+ss_df <- get_top10_comps_side_by_side("Shedeur Sanders", "SS", similarity_matrix_rgr, 
+                                      present_data, past_data, qbr_data) 
+jd_df <- get_top10_comps_side_by_side("Jaxson Dart", "JD", similarity_matrix_rgr, 
+                                      present_data, past_data, qbr_data) 
+ts_df <- get_top10_comps_side_by_side("Tyler Shough", "TS", similarity_matrix_rgr, 
+                                      present_data, past_data, qbr_data) 
 
-cbind(cw_df, dg_df, ss_df, jd_df, ts_df) %>%
+cbind(cw_df, ss_df, jd_df, ts_df) %>%
   sputil::write_latex_table(
     file = "tables/side_by_side_similarity.tex",
-    colnames = rep(c("Comp", "Score"), times = 5),
+    colnames = rep(c("Comp", "Score"), times = 4),
     prefix_rows = "
       \\multicolumn{4}{c|}{Cam Ward} &
-      \\multicolumn{4}{c|}{Dillon Gabriel} &
       \\multicolumn{4}{c|}{Shedeur Sanders} &
       \\multicolumn{4}{c|}{Jaxson Dart} &
       \\multicolumn{4}{c}{Tyler Shough}
     ",
-    align = "lr|lr|lr|lr|lr"
+    align = "lr|lr|lr|lr"
   )
+
+
+# Helper to compute ENC and cumulative weight stats for a single similarity vector
+compute_similarity_stats <- function(sim_vec, player_name, top_k = 10) {
+  w <- sim_vec[sim_vec > 0]
+  w <- w / sum(w)
+  ess = (sum(w))^2 / sum((w^2))
+  w_sorted <- sort(w, decreasing = TRUE)
+  cum_w <- cumsum(w_sorted)
+  n_50 <- which(cum_w >= 0.50)[1]
+  n_75 <- which(cum_w >= 0.75)[1]
+  n_90 <- which(cum_w >= 0.90)[1]
+  k_eff <- min(top_k, length(w_sorted))
+  top_k_share <- sum(w_sorted[1:k_eff])
   
+  data.frame(
+    player_name = player_name,
+    ESS = ess,
+    comps_50 = n_50,
+    comps_75 = n_75,
+    comps_90 = n_90,
+    top_k = k_eff,
+    top_k_share = top_k_share
+  )
+}
+
+all_similarity_stats <- lapply(seq_len(nrow(similarity_matrix_rgr)), function(i) {
+  compute_similarity_stats(
+    sim_vec = similarity_matrix_rgr[i, ],
+    player_name = present_data$player_name[i],
+    top_k = 10
+  )
+}) %>%
+  bind_rows() %>%
+  transmute(
+    player_name,
+    ESS = round(ESS, 1),
+    comps_50,
+    comps_75,
+    comps_90,
+    top_k_share_pct = paste0(sprintf("%.1f", 100 * top_k_share), "\\%")
+  ) %>%
+  filter(player_name %in% c("Cameron Ward", "Shedeur Sanders", "Jaxson Dart", "Tyler Shough"))
+
+all_similarity_stats %>%
+  sputil::write_latex_table(
+    file = "tables/prospect_ess.tex",
+    colnames = c("Player", "ESS", "50\\%", "75\\%", "90\\%", "Top 10\\% Share"),
+    align = "l|r|r|r|r|r"
+  )
