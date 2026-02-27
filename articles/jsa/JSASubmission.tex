@@ -154,7 +154,8 @@ Figure \ref{fig:importance} shows the importance of each feature learned by the 
 
 \begin{figure}[h]
     \centering
-    \includegraphics[width=0.7\linewidth]{variable_importance.pdf}
+    \includegraphics[width=0.49\linewidth]{cls_variable_importance.pdf}
+    \includegraphics[width=0.49\linewidth]{rgr_variable_importance.pdf}
     \caption{\it Importance of predictor variables in random forest model. The response variable in this model is regressed NFL QBR, averaged across seasons in a player's career.}
     \label{fig:importance}
 \end{figure}
@@ -208,15 +209,23 @@ Figure \ref{fig:prospect-plots} provides a full breakdown of the random forest p
     \centering
     \includegraphics[width=0.24\linewidth]{prospect_histogram_ward.pdf}
     \includegraphics[width=0.24\linewidth]{prospect_histogram_sanders.pdf}
-    \includegraphics[width=0.24\linewidth]{prospect_histogram_gabriel.pdf}
-    \includegraphics[width=0.24\linewidth]{prospect_histogram_dart.pdf} \\
+    \includegraphics[width=0.24\linewidth]{prospect_histogram_dart.pdf} 
+    \includegraphics[width=0.24\linewidth]{prospect_histogram_shough.pdf} \\
     \includegraphics[width=0.24\linewidth]{prospect_similarity_ward.pdf}
     \includegraphics[width=0.24\linewidth]{prospect_similarity_sanders.pdf}
-    \includegraphics[width=0.24\linewidth]{prospect_similarity_gabriel.pdf}
     \includegraphics[width=0.24\linewidth]{prospect_similarity_dart.pdf}
+    \includegraphics[width=0.24\linewidth]{prospect_similarity_shough.pdf}
     \caption{\it Top: Histogram of training players' regressed QBR values weighted by similarity to the prospect being predicted. The vertical green line annotates each prospect's predicted QBR, which matches the mean of the weighted distribution. Bottom: Scatter plot showing individual similarity scores and regressed QBR for historical prospects.}
     \label{fig:prospect-plots}
 \end{figure}
+
+\begin{table}[H]
+  \resizebox{\textwidth}{!}{
+    \input{prospect_ess.tex}
+  }
+  \caption{\it WRITE CAPTION}
+  \label{tab:prospect-ess}
+\end{table}
 
 \section{Software}
 \label{sec:software}
