@@ -3,6 +3,7 @@ library(ranger)
 library(ggplot2)
 library(tidyr)
 library(xtable)
+library(purrr)
 
 years_to_first_start <- treecomp::nfl_qbr_by_year %>% 
   group_by(player_name) %>%
@@ -720,10 +721,10 @@ cbind(cw_df, ss_df, jd_df, ts_df) %>%
     file = "tables/side_by_side_similarity.tex",
     colnames = rep(c("Comp", "Score"), times = 4),
     prefix_rows = "
-      \\multicolumn{4}{c|}{Cam Ward} &
-      \\multicolumn{4}{c|}{Shedeur Sanders} &
-      \\multicolumn{4}{c|}{Jaxson Dart} &
-      \\multicolumn{4}{c}{Tyler Shough}
+      \\multicolumn{2}{c|}{Cam Ward} &
+      \\multicolumn{2}{c|}{Shedeur Sanders} &
+      \\multicolumn{2}{c|}{Jaxson Dart} &
+      \\multicolumn{2}{c}{Tyler Shough}
     ",
     align = "lr|lr|lr|lr"
   )
@@ -777,3 +778,49 @@ all_similarity_stats %>%
     colnames = c("Player", "ESS", "50\\%", "75\\%", "90\\%", "Top 10\\% Share"),
     align = "l|r|r|r|r|r"
   )
+
+library(purrr)
+
+players_to_plot <- c("Cameron Ward", "Shedeur Sanders", 
+                     "Jaxson Dart", "Tyler Shough")
+
+plot_df <- map_dfr(seq_len(nrow(similarity_matrix_rgr)), function(i) {
+  
+  player <- present_data$player_name[i]
+  
+  w <- similarity_matrix_rgr[i, ]
+  w <- w[w > 0]
+  w <- w / sum(w)
+  
+  w_sorted <- sort(w, decreasing = TRUE)
+  cum_w <- cumsum(w_sorted)
+  
+  tibble(
+    player_name = player,
+    n_comps = seq_along(cum_w),
+    pct_prediction = 100 * cum_w
+  )
+})
+
+
+{
+  sputil::open_device("figures/comp_pct_plot.pdf", height = 5)
+  plot <- ggplot(plot_df, aes(x = n_comps, 
+                              y = pct_prediction, 
+                              color = player_name)) +
+    geom_line(linewidth = 0.8) +
+    scale_y_continuous(
+      limits = c(0, 101),
+      labels = function(x) paste0(x, "%")
+    ) +
+    labs(
+      x = "Number of Comps",
+      y = "Percent of Prediction",
+      color = "Player"
+    ) +
+    theme_minimal() 
+  print(plot)
+  dev.off()
+  }
+
+
