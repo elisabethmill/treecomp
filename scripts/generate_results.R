@@ -24,6 +24,7 @@ years_to_first_start %>%
 num_trees <- 1000
 set.seed(123)
 
+
 # Determine mean regression for QBR ----
 
 QBR2_passing_data <- treecomp::nfl_qbr_by_year %>%
@@ -43,7 +44,8 @@ summary(QBR2_model)
 
 c <- coef(QBR2_model)[1]
 
-# Tune random forest ----
+
+# Make train/test split and divide training data into cross-validation folds ----
 
 data <- treecomp::quarterback %>%
   mutate(
@@ -121,12 +123,8 @@ folds_train_regr <- make_temporal_folds(
   min_train_years = 0   # because we're not doing "proper" temporal CV
 )
 
-grid <- expand.grid(
-  mtry = c(1, 2, 4, 8, 16),
-  min.node.size = c(5, 10, 25, 50, 100),
-  max.depth = c(2, 4, 8, 16, 32),
-  stringsAsFactors = FALSE
-)
+
+# Set up training and validation functions ----
 
 train_predict_ranger <- function(data_train,
                                  data_pred,
@@ -198,91 +196,6 @@ train_predict_glm <- function(data_train,
   return(list(fit = fit, pred = pred))
 }
 
-
-#pred_classification <- tibble::tibble()
-#pred_regression <- tibble::tibble()
-#
-#for (i in 1:nrow(grid)) {
-#
-#  if ((i %% 10) == 0) {
-#    logger::log_info("Training hyperparameter set {i} of {nrow(grid)}")
-#  }
-#
-#  for (k in 1:length(folds_train_cls)) {
-#
-#    data_train_classification_k <- data_train_classification |>
-#      dplyr::slice(folds_train_cls[[k]]$train)
-#
-#    data_pred_classification_k <- data_train_classification |>
-#      dplyr::slice(folds_train_cls[[k]]$test)
-#
-#    fit_classification <- train_predict_ranger(
-#      data_train = data_train_classification_k,
-#      data_pred = data_pred_classification_k,
-#      task = "classification",
-#      num.trees = num_trees,
-#      mtry = grid$mtry[i],
-#      min.node.size = grid$min.node.size[i],
-#      max.depth = grid$max.depth[i]
-#    )
-#
-#    sim_classification <- treecomp::extract_similarity(
-#      object = fit_classification$fit,
-#      newdata = data_pred_classification_k,
-#      refdata = data_train_classification_k,
-#      match_training = TRUE
-#    )
-#
-#    pred_classification <- dplyr::bind_rows(
-#      pred_classification,
-#      tibble::tibble(
-#        mtry = grid$mtry[i],
-#        min.node.size = grid$min.node.size[i],
-#        max.depth = grid$max.depth[i],
-#        index = folds_train_cls[[k]]$test,
-#        pred = fit_classification$pred,
-#        ess = 1 / rowSums(sim_classification^2),
-#        n_train = nrow(data_train_classification_k)
-#      )
-#    )
-#
-#    data_train_regression_k <- data_train_regression |>
-#      dplyr::slice(folds_train_regr[[k]]$train)
-#
-#    data_pred_regression_k <- data_train_regression |>
-#      dplyr::slice(folds_train_regr[[k]]$test)
-#
-#    fit_regression <- train_predict_ranger(
-#      data_train = data_train_regression_k,
-#      data_pred = data_pred_regression_k,
-#      task = "regression",
-#      num.trees = num_trees,
-#      mtry = grid$mtry[i],
-#      min.node.size = grid$min.node.size[i],
-#      max.depth = grid$max.depth[i]
-#    )
-#
-#    sim_regression <- treecomp::extract_similarity(
-#      object = fit_regression$fit,
-#      newdata = data_pred_regression_k,
-#      refdata = data_train_regression_k,
-#      match_training = TRUE
-#    )
-#
-#    pred_regression <- dplyr::bind_rows(
-#      pred_regression,
-#      tibble::tibble(
-#        mtry = grid$mtry[i],
-#        min.node.size = grid$min.node.size[i],
-#        max.depth = grid$max.depth[i],
-#        index = folds_train_regr[[k]]$test,
-#        pred = fit_regression$pred,
-#        ess = 1 / rowSums(sim_regression^2),
-#        n_train = nrow(data_train_regression_k)
-#      )
-#    )
-#  }
-#}
 validate <- function(args,
                      data_train_classification,
                      data_train_regression,
@@ -367,6 +280,16 @@ validate <- function(args,
   )
 }
 
+
+# Tune the random forest models ----
+
+grid <- expand.grid(
+  mtry = c(1, 2, 4, 8, 16),
+  min.node.size = c(5, 10, 25, 50, 100),
+  max.depth = c(2, 4, 8, 16, 32),
+  stringsAsFactors = FALSE
+)
+
 args_table <- dplyr::cross_join(grid, tibble::tibble(fold = 1:length(folds_train_cls)))
 args_list <- split(args_table, f = 1:nrow(args_table))
 
@@ -383,6 +306,9 @@ pred_list <- pbapply::pblapply(
   train_predict_ranger = train_predict_ranger
 )
 parallel::stopCluster(cluster)
+
+
+# Extract predictions and model diagnostics from random forests ----
 
 pred <- do.call(dplyr::bind_rows, args = pred_list)
 
@@ -424,7 +350,6 @@ param_min_regression <- cv_regression |>
   dplyr::arrange(deviance) |>
   dplyr::slice(1)
 
-
 {
   sputil::open_device("figures/ESS_vs_hyperparameter_values.pdf", height = 4, width = 8)
   plot <- dplyr::bind_rows(
@@ -453,6 +378,7 @@ param_min_regression <- cv_regression |>
 }
 
 
+# Fit full models after hyperparameter tuning ----
 
 fit_rf_classification <- train_predict_ranger(
   data_train = data_train_classification,
@@ -508,6 +434,9 @@ data_test_pred |>
   ) |>
   dplyr::select(dplyr::starts_with("devexp_"))
 
+
+# Re-train random forest model on full (train + test) data after validating test performance ----
+
 fit_rf_classification_full <- train_predict_ranger(
   data_train = classif_data,
   data_pred = classif_data,
@@ -529,6 +458,7 @@ fit_rf_regression_full <- train_predict_ranger(
 )
 
 
+# Extract importance scores from random forest model ----
 
 rgr_importance_scores <- importance(fit_rf_regression_full$fit)
 cls_importance_scores <- importance(fit_rf_classification_full$fit)
