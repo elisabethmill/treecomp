@@ -196,6 +196,36 @@ train_predict_glm <- function(data_train,
   return(list(fit = fit, pred = pred))
 }
 
+train_predict_knn <- function(data_train,
+                              data_pred,
+                              task = c("classification", "regression"),
+                              ...) {
+
+  data_combined <- dplyr::bind_rows(data_train, data_pred) |>
+    dplyr::select(
+      ncaa_yds_per_att_career, ncaa_games_per_year,
+      ncaa_att_per_year, ncaa_cmp_per_year, ncaa_yds_per_year, ncaa_td_per_year, ncaa_int_per_year,
+      ncaa_rush_att_per_year, ncaa_rush_yds_per_year, ncaa_rush_td_per_year,
+      ncaa_sos_last, ncaa_games_last, ncaa_yds_per_att_last, ncaa_passer_rating_last,
+      ncaa_all_america, ncaa_heisman, ncaa_heisman_last,
+    ) |>
+    scale()
+  
+  train <- data_combined[1:nrow(data_train), ]
+  test <- data_combined[-(1:nrow(data_train)), ]
+
+  if (task == "classification") {
+    outcome <- as.numeric(data_train$played_nfl == "yes")
+  } else {
+    outcome <- data_train$reg_qbr
+  }
+
+  fit <- FNN::knn.reg(train = train, test = test, y = outcome, ...)
+  pred <- fit$pred
+
+  return(list(fit = fit, pred = pred))
+}
+
 validate <- function(args,
                      data_train_classification,
                      data_train_regression,
@@ -307,9 +337,6 @@ pred_list <- pbapply::pblapply(
 )
 parallel::stopCluster(cluster)
 
-
-# Extract predictions and model diagnostics from random forests ----
-
 pred <- do.call(dplyr::bind_rows, args = pred_list)
 
 deviance_classification <- data_train_classification |>
@@ -350,6 +377,8 @@ param_min_regression <- cv_regression |>
   dplyr::arrange(deviance) |>
   dplyr::slice(1)
 
+# Examine sensitivity of ESS to hyperparameters ----
+
 {
   sputil::open_device("figures/ESS_vs_hyperparameter_values.pdf", height = 4, width = 8)
   plot <- dplyr::bind_rows(
@@ -376,6 +405,67 @@ param_min_regression <- cv_regression |>
   print(plot)
   dev.off()
 }
+
+
+# Tune k-nearest neighbors ----
+
+pred_knn_oos_cls <- NULL
+pred_knn_oos_regr <- NULL
+
+for (f in 1:length(folds_train_cls)) {
+  for (k in 1:100) {
+    fit_cls <- train_predict_knn(
+      data_train = data_train_classification |>
+        dplyr::slice(folds_train_cls[[f]]$train),
+      data_pred = data_train_classification |>
+        dplyr::slice(folds_train_cls[[f]]$test),
+      task = "classification",
+      k = k
+    )
+    pred_knn_oos_cls <- tibble::tibble(
+      index = folds_train_cls[[f]]$test,
+      k = k,
+      pred = fit_cls$pred
+    ) |>
+      dplyr::bind_rows(pred_knn_oos_cls)
+
+    fit_regr <- train_predict_knn(
+      data_train = data_train_regression |>
+        dplyr::slice(folds_train_regr[[f]]$train),
+      data_pred = data_train_regression |>
+        dplyr::slice(folds_train_regr[[f]]$test),
+      task = "regression",
+      k = k
+    )
+    pred_knn_oos_regr <- tibble::tibble(
+      index = folds_train_regr[[f]]$test,
+      k = k,
+      pred = fit_regr$pred
+    ) |>
+      dplyr::bind_rows(pred_knn_oos_regr)
+  }
+}
+
+cv_classification_knn <- data_train_classification |>
+  dplyr::mutate(index = 1:dplyr::n()) |>
+  dplyr::left_join(pred_knn_oos_cls, by = "index") |>
+  dplyr::mutate(
+    deviance = -2 * log(ifelse(played_nfl == "yes", pred, 1 - pred))
+  ) |>
+  dplyr::group_by(k) |>
+  dplyr::summarize(deviance = mean(deviance), .groups = "drop") |>
+  dplyr::arrange(deviance)
+
+cv_regression_knn <- data_train_regression |>
+  dplyr::mutate(index = 1:dplyr::n()) |>
+  dplyr::left_join(pred_knn_oos_regr, by = "index") |>
+  dplyr::mutate(
+    deviance = (reg_qbr - pred)^2
+  ) |>
+  dplyr::group_by(k) |>
+  dplyr::summarize(deviance = mean(deviance), .groups = "drop") |>
+  dplyr::arrange(deviance)
+
 
 
 # Fit full models after hyperparameter tuning ----
@@ -412,6 +502,20 @@ fit_glm_regression <- train_predict_glm(
   task = "regression"
 )
 
+fit_knn_classification <- train_predict_knn(
+  data_train = data_train_classification,
+  data_pred = data_test,
+  task = "classification",
+  k = cv_classification_knn$k[1]
+)
+
+fit_knn_regression <- train_predict_knn(
+  data_train = data_train_regression,
+  data_pred = data_test,
+  task = "regression",
+  k = cv_regression_knn$k[1]
+)
+
 data_test_pred <- data_test |>
   dplyr::mutate(
     pred_rf_classification = fit_rf_classification$pred,
@@ -420,17 +524,22 @@ data_test_pred <- data_test |>
     pred_glm_classification = fit_glm_classification$pred,
     pred_glm_regression = fit_glm_regression$pred,
     pred_glm_qbr = pred_glm_classification * pred_glm_regression,
+    pred_knn_classification = fit_knn_classification$pred,
+    pred_knn_regression = fit_knn_regression$pred,
+    pred_knn_qbr = pred_knn_classification * pred_knn_regression,
   )
 
 data_test_pred |>
   dplyr::summarize(
     deviance_null = mean((reg_qbr - mean(reg_qbr))^2),
     deviance_rf = mean((reg_qbr - pred_rf_qbr)^2),
-    deviance_glm = mean((reg_qbr - pred_glm_qbr)^2)
+    deviance_glm = mean((reg_qbr - pred_glm_qbr)^2),
+    deviance_knn = mean((reg_qbr - pred_knn_qbr)^2)
   ) |>
   dplyr::mutate(
     devexp_rf = 1 - deviance_rf / deviance_null,
-    devexp_glm = 1 - deviance_glm / deviance_null
+    devexp_glm = 1 - deviance_glm / deviance_null,
+    devexp_knn = 1 - deviance_knn / deviance_null
   ) |>
   dplyr::select(dplyr::starts_with("devexp_"))
 
