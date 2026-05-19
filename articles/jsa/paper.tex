@@ -103,10 +103,11 @@ The similarity score $\bar w_{0,i}$ ranges from zero to one, and in the \nameref
 
 Note that the similarity score is not symmetric. In general, $\bar w_{0,i} \ne \bar w_{i,0}$, and this inequality is desired. For intuition, consider a toy example in which similarity is based only on passing attempts per season. Among players in the 2025 draft class, the top passers by attempts per season were Cam Ward (478.7), Shedeur Sanders (453.5), and Seth Henigan (447.8). In this example, Ward's most similar player is Sanders, but Sanders' most similar player is Henigan, not Ward, hence the asymmetry in similarity.
 
-% TODO: Revise the first sentence here
-We also subjectively validate the meaningfulness of the similarity scores through the lens of effective sample size (ESS). When calculating a weighted average with weights $w_1, ..., w_n$, the ESS is given by \citep{mccaffrey_propensity_2004}:
-$$\text{ESS}=\frac{\left(\sum_{i=1}^nw_{i}\right)^2}{\sum_{i=1}^{n}w_i^2}.$$
-The more the prediction weights concentrate in a smaller number of player comps, the lower the ESS.
+\revision{For an individual prospect, the effective sample size (ESS) of their prediction (\ref{eqn:rf-as-knn}) is \citep{mccaffrey_propensity_2004}:}
+$$
+  \text{ESS}=\frac{\left(\sum_{i=1}^n\revision{\bar w_{0,i}}\right)^2}{\sum_{i=1}^{n}\revision{\bar w_{0,i}}^2}.
+$$
+\revision{We use the ESS to interpret how much the prediction weight is concentrated in a subset of compts. When all weights are equal, the ESS achieves its maximum value of $n$. As more weight concentrates in a smaller number of comps, the ESS decreases.}
 
 \subsection{Software}
 \label{sec:software}
@@ -186,12 +187,21 @@ We performed cross-validation separately for the first-stage (classification) ra
 
 \subsection{Validation}
 
-To validate the performance of the two-stage random forest model, we compare its out-of-sample performance in predicting QBR against a simple alternative: two-stage generalized linear models. In the two-stage linear regression model, we first estimate a logistic regression model for the probability of nonzero QBR and then estimate a second linear regression model for expected QBR conditional on it being nonzero. These logistic and linear regression models use the same features as the random forest models. We evaluate both models on the held-out test data of quarterbacks who completed their college careers in 2004, 2008, 2012, 2016, or 2020, which were not used for hyperparameter tuning.
+To validate the performance of the two-stage random forest model, we \revision{benchmark} its out-of-sample performance in predicting QBR against \revision{two} simple alternative\revision{s}: \revision{a} two-stage generalized linear model \revision{(GLM) and a two-stage KNN algorithm, using} the same features as the random forest models. In the two-stage linear regression model, we first estimate a logistic regression model for the probability of nonzero QBR and then estimate a second linear regression model for expected QBR conditional on it being nonzero. \revision{The KNN model uses the same two stages, with $k = 47$ neighbors in the first stage and $k = 39$ neighbors in the second stage, tuned via the same 17-fold cross validation procedure as the random forest model.} We evaluate \revision{all} models on the held-out test data of quarterbacks who completed their college careers in 2004, 2008, 2012, 2016, or 2020, which were not used for hyperparameter tuning.
 
 \section{Results}
 \label{sec:results}
 
-Figure \ref{fig:importance} shows the importance of each feature learned by the two-stage random forest model. Together, the models explained 29.7\% of the variance of regressed QBR in the test set. The two-stage generalized linear model for comparison explained 28.3\% of the regressed QBR variance in the test set. For the first-stage (classification) random forest, final-season strength of schedule, final-season passer rating, and average passing performance (yards, touchdowns) stand out as the most important predictors of nonzero QBR in the NFL. For the second-stage (regression) random forest, career passing yards per attempt and rushing yards per season stand out as the top two predictors of NFL success, followed by related stats, such as passing volume (attempts and completions per season), rushing performance (touchdowns and attempts per season), and passing efficiency (yards per attempt and passer rating). Note that yards per season, touchdowns per season, and completions per season are highly correlated with each other---each pairwise correlation is at least 0.94.
+\revision{The two stage random forest model explained 29.7\% of the variance of regressed QBR in the held-out test set. For comparison, the two-stage GLM explained 28.3\% of the test variance, and the two-stage KNN model explained 25.1\% of the test variance.} Figure \ref{fig:3d-plot} visualizes the prediction function learned by the random forest, plotting predicted QBR against career passing attempts per season and career rushing yards per season. The highest predictions tend to occur for quarterbacks with relatively high passing volume combined with meaningful rushing production, reflecting the modern dual-threat profile that translates well to the NFL. The predictions of the random forest model are conservative, with extremely few quarterbacks predicted to exceed a QBR of 40. This speaks to the large number of college quarterbacks who achieve zero QBR in the NFL and the difficulty of distinguishing between prospects based on college performance statistics alone.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.7\linewidth]{3d_plot.pdf}
+    \caption{\it Visualization of prediction function learned by random forest model. Final strength of schedule is the most important feature in the first-stage (classification) random forest, and career yards per attempt is the most important feature in the second-stage (regression) random forest. Each point represents one player from the historical training set, and the color corresponds to the player's fitted value.}
+    \label{fig:3d-plot}
+\end{figure}
+
+Figure \ref{fig:importance} shows the importance of each feature learned by the two-stage random forest model. For the first-stage (classification) random forest, final-season strength of schedule, final-season passer rating, and average passing performance (yards, touchdowns) stand out as the most important predictors of nonzero QBR in the NFL. For the second-stage (regression) random forest, career passing yards per attempt and rushing yards per season stand out as the top two predictors of NFL success, followed by related stats, such as passing volume (attempts and completions per season), rushing performance (touchdowns and attempts per season), and passing efficiency (yards per attempt and passer rating). Note that yards per season, touchdowns per season, and completions per season are highly correlated with each other---each pairwise correlation is at least 0.94.
 
 \begin{figure}[H]
     \centering
@@ -202,26 +212,6 @@ Figure \ref{fig:importance} shows the importance of each feature learned by the 
     }
     \label{fig:importance}
 \end{figure}
-
-Figure \ref{fig:3d-plot} visualizes the prediction function learned by the random forest, plotting predicted QBR against career passing attempts per season and career rushing yards per season. The highest predictions tend to occur for quarterbacks with relatively high passing volume combined with meaningful rushing production, reflecting the modern dual-threat profile that translates well to the NFL. The extreme outlier by passing yards per season is Bailey Zappe, who played only one FBS season at Western Kentucky in Conference USA and was selected by the New England Patriots in the fourth round of the 2022 NFL Draft. The predictions of the random forest model are conservative, with extremely few quarterbacks predicted to exceed a QBR of 40. This speaks to the large number of college quarterbacks who achieve zero QBR in the NFL and the difficulty of distinguishing between prospects based on college performance statistics alone.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.7\linewidth]{3d_plot.pdf}
-    \caption{\it Visualization of prediction function learned by random forest model. Final strength of schedule is the most important feature in the first-stage (classification) random forest, and career yards per attempt is the most important feature in the second-stage (regression) random forest. Each point represents one player from the historical training set, and the color corresponds to the player's fitted value.}
-    \label{fig:3d-plot}
-\end{figure}
-
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=0.6\linewidth]{predicted_vs_actuals.pdf}
-  \caption{\it Predicted and actual (regressed) QBR for all quarterbacks in the dataset. The vast majority (77\%) of actual QBRs are zero, meaning that the points along the x-axis represent 77\% of the data.}
-  \label{fig:predicted-vs-actuals}
-\end{figure}
-
-Figure \ref{fig:predicted-vs-actuals} shows actual vs. predicted QBR for all quarterbacks in the dataset. Recall that 77\% of actual QBRs are zero, which the visualization does not make clear. The errors are very right-skewed, and this further shows why so few college quarterbacks exceed a QBR prediction of 40. Among quarterbacks whose actual QBR is nonzero, most lie above the diagonal line because conditioned on the positive outcome of playing in the NFL, the quarterback is more likely to outperform their QBR prediction.
-
-\subsection{Case Study: 2025 NFL Draft}
 
 Table \ref{tab:top-ten} shows the QBR predictions for the top 10 predicted quarterbacks in the 2025 draft. Cam Ward is predicted to have the second highest QBR, which is a slight mismatch from the common consensus that he was the best quarterback in this draft class and the fact that he was taken first overall in the draft. Dillon Gabriel is projected to have the highest QBR, however, this can likely be attributed to the significant difference in final season strength of schedule (5.83 for Gabriel and 1.58 for Ward). Shedeur Sanders was projected to have the third-highest QBR, respectively. While Dillon Gabriel was not previously expected to be drafted as high as Shedeur Sanders, he had a very consistent college career and finished the highest of any quarterback in Heisman voting in 2024. Interestingly, Gabriel (third round) and Sanders (fifth round) were both selected by the Cleveland Browns after Sanders slid surprisingly deep into the draft, as we discuss later. Jaxson Dart's draft stock increased substantially after the NFL Draft Combine and his pro day. Notably, Tyler Shough is not in the top 10 predicted quarterbacks, even though he was the third quarterback taken in the draft after Ward and Dart. He was the 40th overall pick by the New Orleans Saints.
 
