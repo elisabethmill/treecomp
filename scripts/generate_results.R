@@ -601,11 +601,14 @@ cls_importance_df <- data.frame(
 
 {
   sputil::open_device("figures/rgr_variable_importance.pdf", height = 5)
-  plot <- ggplot(rgr_importance_df, aes(x = reorder(Variable, Importance), y = Importance)) +
+  breaks <- seq(0, 0.12, by = 0.03)
+  plot <- rgr_importance_df |>
+    dplyr::mutate(Importance = Importance / sum(Importance)) |>
+    ggplot(aes(x = reorder(Variable, Importance), y = Importance)) +
     geom_bar(stat = "identity") +
-    coord_flip() +  
-    labs(title = "Regression Model Variable Importance",
-         x = "", y = "Importance") +
+    scale_y_continuous(breaks = breaks, labels = paste0(100 * breaks, "%")) +
+    coord_flip(ylim = c(0, 0.12)) +
+    labs(title = "Regression Model Variable Importance", x = "", y = "Importance") +
     theme_minimal()
   print(plot)
   dev.off()
@@ -613,11 +616,14 @@ cls_importance_df <- data.frame(
 
 {
   sputil::open_device("figures/cls_variable_importance.pdf", height = 5)
-  plot <- ggplot(cls_importance_df, aes(x = reorder(Variable, Importance), y = Importance)) +
+  breaks <- seq(0, 0.12, by = 0.03)
+  plot <- cls_importance_df |>
+    dplyr::mutate(Importance = Importance / sum(Importance)) |>
+    ggplot(aes(x = reorder(Variable, Importance), y = Importance)) +
     geom_bar(stat = "identity") +
-    coord_flip() +  
-    labs(title = "Classification Model Variable Importance",
-         x = "", y = "Importance") +
+    scale_y_continuous(breaks = breaks, labels = paste0(100 * breaks, "%")) +
+    coord_flip(ylim = c(0, 0.12)) +
+    labs(title = "Classification Model Variable Importance", x = "", y = "Importance") +
     theme_minimal()
   print(plot)
   dev.off()
