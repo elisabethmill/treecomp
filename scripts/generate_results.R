@@ -747,20 +747,22 @@ present_data <- present_data |>
   )
 
 present_data |>
+  # Remove draft-ineligible players
+  dplyr::filter(!player_name %in% c("Darian Mensah", "Cade Klubnik", "E.J. Warner", "Cameron Skattebo")) |>
   dplyr::arrange(-predictions) |>
   dplyr::mutate(
+    rank = 1:dplyr::n(),
     pred_classification = paste0(round(100 * pred_classification), "\\%"),
     pred_regression = sprintf("%.1f", pred_regression),
     predictions = sprintf("%.1f", predictions)
   ) |>
+  dplyr::filter(rank %in% 1:10 | player_name == "Tyler Shough") |>
   dplyr::select(player_name, pred_classification, pred_regression, predictions) |>
-  # Remove draft-ineligible players
-  dplyr::filter(!player_name %in% c("Darian Mensah", "Cade Klubnik", "E.J. Warner", "Cameron Skattebo")) |>
-  head(10) |>
   sputil::write_latex_table(
     file = "tables/top_ten.tex",
     colnames = c("Quarterback", "P(QBR $>$ 0)", "E[QBR $|$ QBR $>$ 0]", "Predicted QBR"),
-    align = "l|cc|c"
+    align = "l|cc|c",
+    hline.after = c(0, 10)
   )
 
 
@@ -811,7 +813,7 @@ get_prospect_plots <- function(player, present_data, similarity_matrix_rgr,
            title = player) +
       geom_vline(aes(xintercept = present_data[index, ]$predictions), 
                  color = "darkorange", linewidth = 2) +
-      coord_cartesian(ylim = c(0, 0.08))
+      coord_cartesian(ylim = c(0, 0.2))
     print(plot)
     dev.off()
     }
@@ -832,29 +834,28 @@ get_prospect_plots <- function(player, present_data, similarity_matrix_rgr,
 
 get_prospect_plots("Cameron Ward", present_data, similarity_matrix_rgr,
                     qbr_data, "ward")
-get_prospect_plots("Shedeur Sanders", present_data, similarity_matrix_rgr,
-                   qbr_data, "sanders")
 get_prospect_plots("Jaxson Dart", present_data, similarity_matrix_rgr,
                    qbr_data, "dart")
 get_prospect_plots("Tyler Shough", present_data, similarity_matrix_rgr,
                    qbr_data, "shough")
+get_prospect_plots("Dillon Gabriel", present_data, similarity_matrix_rgr,
+                   qbr_data, "gabriel")
 
 
 get_top10_comps_side_by_side <- function(target_name,
                                          player_initials,
-                                         similarity_matrix_rgr,
+                                         similarity_matrix,
                                          present_data,
-                                         past_data,
-                                         qbr_data,
+                                         reference_data,
                                          qbr_col = "reg_qbr") {
   
   idx <- match(target_name, present_data$player_name)
   if (is.na(idx)) stop("target_name not found in present_data$player_name")
   
   rgr_top10 <- tibble(
-    rgr_player = qbr_data$player_name,
-    rgr_sim    = as.numeric(similarity_matrix_rgr[idx, , drop = TRUE]),
-    rgr_qbr    = qbr_data[[qbr_col]]
+    rgr_player = reference_data$player_name,
+    rgr_sim    = as.numeric(similarity_matrix[idx, , drop = TRUE]),
+    rgr_qbr    = reference_data[[qbr_col]]
   ) %>%
     filter(rgr_sim > 0) %>%
     arrange(desc(rgr_sim)) %>%
@@ -869,25 +870,44 @@ get_top10_comps_side_by_side <- function(target_name,
     )
 }
 
-cw_df <- get_top10_comps_side_by_side("Cameron Ward", "CW", similarity_matrix_rgr, 
-                                      present_data, past_data, qbr_data) 
-ss_df <- get_top10_comps_side_by_side("Shedeur Sanders", "SS", similarity_matrix_rgr, 
-                                      present_data, past_data, qbr_data) 
-jd_df <- get_top10_comps_side_by_side("Jaxson Dart", "JD", similarity_matrix_rgr, 
-                                      present_data, past_data, qbr_data) 
-ts_df <- get_top10_comps_side_by_side("Tyler Shough", "TS", similarity_matrix_rgr, 
-                                      present_data, past_data, qbr_data) 
+ts_df_cls <- get_top10_comps_side_by_side(
+  target_name = "Tyler Shough",
+  player_initials = "TS",
+  similarity_matrix = similarity_matrix_cls,
+  present_data = present_data,
+  reference_data = past_data
+) 
+ts_df_rgr <- get_top10_comps_side_by_side(
+  target_name = "Tyler Shough",
+  player_initials = "TS",
+  similarity_matrix = similarity_matrix_rgr,
+  present_data = present_data,
+  reference_data = qbr_data
+) 
+dg_df_cls <- get_top10_comps_side_by_side(
+  target_name = "Dillon Gabriel",
+  player_initials = "DG",
+  similarity_matrix = similarity_matrix_cls,
+  present_data = present_data,
+  reference_data = past_data
+) 
+dg_df_rgr <- get_top10_comps_side_by_side(
+  target_name = "Dillon Gabriel",
+  player_initials = "DG",
+  similarity_matrix = similarity_matrix_rgr,
+  present_data = present_data,
+  reference_data = qbr_data
+) 
 
-cbind(cw_df, ss_df, jd_df, ts_df) %>%
+
+cbind(ts_df_cls, ts_df_rgr, dg_df_cls, dg_df_rgr) %>%
   sputil::write_latex_table(
     file = "tables/side_by_side_similarity.tex",
     colnames = rep(c("Comp", "Score"), times = 4),
-    prefix_rows = "
-      \\multicolumn{2}{c|}{Cam Ward} &
-      \\multicolumn{2}{c|}{Shedeur Sanders} &
-      \\multicolumn{2}{c|}{Jaxson Dart} &
-      \\multicolumn{2}{c}{Tyler Shough}
-    ",
+    prefix_rows = c(
+      "\\multicolumn{4}{c|}{Tyler Shough} & \\multicolumn{4}{c}{Dillon Gabriel}",
+      "\\multicolumn{2}{c}{Stage 1 (Classification)} & \\multicolumn{2}{c|}{Stage 2 (Regression)} & \\multicolumn{2}{c}{Stage 1 (Classification)} & \\multicolumn{2}{c}{Stage 2 (Regression)}"
+    ),
     align = "lr|lr|lr|lr"
   )
 
