@@ -5,24 +5,60 @@ library(tidyr)
 library(xtable)
 library(purrr)
 
-years_to_first_start <- treecomp::nfl_qbr_by_year %>% 
+years_to_start <- treecomp::nfl_qbr_by_year %>% 
   group_by(player_name) %>%
-  filter(!is.na(draft_year)) %>%
+  # limit ourselves to players whose careers are unlikely to be censored
+  filter(draft_year >= 2006, draft_year <= 2019) %>%
+  # find seasons in which the player started at least one game
+  filter(games_started > 0) %>%
   summarise(
     draft_year = first(draft_year),
-    first_start_season = suppressWarnings(min(year[games_started > 0], na.rm = TRUE)),
-    years_until_first_start = ifelse(is.infinite(first_start_season),
-                                     NA_integer_,
-                                     first_start_season - draft_year),
+    first_start_season = min(year, na.rm = TRUE),
+    last_start_season = max(year, na.rm = TRUE),
+    years_until_first_start = ifelse(
+      test = is.infinite(first_start_season),
+      yes = NA_integer_,
+      no = first_start_season - draft_year
+    ),
+    years_until_last_start = ifelse(
+      test = is.infinite(last_start_season),
+      yes = NA_integer_,
+      no = last_start_season - draft_year
+    ),
     .groups = "drop"
   )
 
-years_to_first_start %>%
-  count(years_until_first_start, name = "n") %>%
-  arrange(years_until_first_start)
+right_censor <- years_to_start |>
+  dplyr::count(years_until_first_start) |>
+  dplyr::mutate(pct = 1 - cumsum(n / sum(n[!is.na(years_until_first_start)]))) |>
+  dplyr::filter(pct > 1e-10)
+
+left_censor <- years_to_start |>
+  dplyr::count(years_until_last_start) |>
+  dplyr::mutate(pct = cumsum(n / sum(n[!is.na(years_until_last_start)])))
 
 num_trees <- 1000
 set.seed(123)
+
+features <- c(
+  ncaa_yds_per_att_career = "Career Pass Yds/Att",
+  ncaa_games_per_year = "Games/Season",
+  ncaa_att_per_year = "Pass Attempts/Season",
+  ncaa_cmp_per_year = "Pass Completions/Season",
+  ncaa_yds_per_year = "Pass Yards/Season",
+  ncaa_td_per_year = "Pass Touchdowns/Season",
+  ncaa_int_per_year = "Pass Interceptions/Season",
+  ncaa_rush_att_per_year = "Rush Attempts/Season",
+  ncaa_rush_yds_per_year = "Rush Yards/Season",
+  ncaa_rush_td_per_year = "Rush Touchdowns/Season",
+  ncaa_sos_last = "Final Strength of Schedule",
+  ncaa_games_last = "Final Games",
+  ncaa_yds_per_att_last = "Final Yds/Att",
+  ncaa_passer_rating_last = "Final Passer Rating",
+  ncaa_all_america = "All-America Seasons",
+  ncaa_heisman = "Won Heisman Award",
+  ncaa_heisman_last = "Final Heisman Voting"
+)
 
 
 # Determine mean regression for QBR ----
@@ -70,6 +106,49 @@ past_data <- data %>%
       ifelse(reg_qbr > 0, "yes", "no"),
       levels = c("no", "yes")
     )
+  )
+
+# Approximately how many NFL careers do we think are hidden by the censoring?
+pct_censored <- past_data |>
+  dplyr::count(ncaa_year_last) |>
+  dplyr::mutate(
+    years_until_last_start = 2004 - ncaa_year_last,
+    years_until_first_start = 2023 - ncaa_year_last
+  ) |>
+  dplyr::left_join(left_censor, by = "years_until_last_start", suffix = c("", "_left")) |>
+  dplyr::rename(pct_left = pct) |>
+  dplyr::left_join(right_censor, by = "years_until_first_start", suffix = c("", "_right")) |>
+  dplyr::rename(pct_right = pct) |>
+  dplyr::mutate(
+    pct_left = dplyr::coalesce(pct_left, 0),
+    pct_right = dplyr::coalesce(pct_right, 0)
+  ) |>
+  dplyr::select(ncaa_year_last, n, pct_left, pct_right)
+
+pct_censored |>
+  dplyr::summarize(censored = weighted.mean(pct_left + pct_right, w = n))
+
+# Write feature list table to file
+past_data |>
+  dplyr::select(dplyr::all_of(names(features))) |>
+  tidyr::pivot_longer(cols = dplyr::everything()) |>
+  dplyr::group_by(name = factor(name, levels = unique(name))) |>
+  dplyr::summarize(
+    min = min(value),
+    q1 = quantile(value, probs = 0.25),
+    median = median(value),
+    mean = mean(value),
+    q3 = quantile(value, probs = 0.75),
+    max = max(value),
+    .groups = "drop"
+  ) |>
+  dplyr::mutate(name = features[name]) |>
+  sputil::write_latex_table(
+    file = "tables/feature_list.tex",
+    colnames = c("Feature", "Min", "Q1", "Median", "Mean", "Q3", "Max"),
+    align = "l|rrrrrr",
+    digits = 1,
+    hline.after = c(0, 2, 7, 10, 14)
   )
 
 classif_data <- past_data
@@ -571,31 +650,12 @@ fit_rf_regression_full <- train_predict_ranger(
 
 rgr_importance_scores <- importance(fit_rf_regression_full$fit)
 cls_importance_scores <- importance(fit_rf_classification_full$fit)
-variable_display <- c(
-  ncaa_yds_per_att_career = "Career Yds/Att",
-  ncaa_games_per_year = "Games/Season",
-  ncaa_att_per_year = "Attempts/Season",
-  ncaa_cmp_per_year = "Completions/Season",
-  ncaa_yds_per_year = "Yards/Season",
-  ncaa_td_per_year = "Touchdowns/Season",
-  ncaa_int_per_year = "Interceptions/Season",
-  ncaa_rush_att_per_year = "Rush Attempts/Season",
-  ncaa_rush_yds_per_year = "Rush Yards/Season",
-  ncaa_rush_td_per_year = "Rush Touchdowns/Season",
-  ncaa_sos_last = "Final Strength of Schedule",
-  ncaa_games_last = "Final Games",
-  ncaa_yds_per_att_last = "Final Yds/Att",
-  ncaa_passer_rating_last = "Final Passer Rating",
-  ncaa_all_america = "All-America Seasons",
-  ncaa_heisman = "Won Heisman Award",
-  ncaa_heisman_last = "Final Heisman Voting"
-)
 rgr_importance_df <- data.frame(
-  Variable = variable_display[names(rgr_importance_scores)],
+  Variable = features[names(rgr_importance_scores)],
   Importance = rgr_importance_scores
 )
 cls_importance_df <- data.frame(
-  Variable = variable_display[names(cls_importance_scores)],
+  Variable = features[names(cls_importance_scores)],
   Importance = cls_importance_scores
 )
 
