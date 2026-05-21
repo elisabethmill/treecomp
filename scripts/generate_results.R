@@ -5,24 +5,61 @@ library(tidyr)
 library(xtable)
 library(purrr)
 
-years_to_first_start <- treecomp::nfl_qbr_by_year %>% 
+years_to_start <- treecomp::nfl_qbr_by_year %>% 
   group_by(player_name) %>%
-  filter(!is.na(draft_year)) %>%
+  # limit ourselves to players whose careers are unlikely to be censored
+  filter(draft_year >= 2006, draft_year <= 2019) %>%
+  # find seasons in which the player started at least one game
+  filter(games_started > 0) %>%
   summarise(
     draft_year = first(draft_year),
-    first_start_season = suppressWarnings(min(year[games_started > 0], na.rm = TRUE)),
-    years_until_first_start = ifelse(is.infinite(first_start_season),
-                                     NA_integer_,
-                                     first_start_season - draft_year),
+    first_start_season = min(year, na.rm = TRUE),
+    last_start_season = max(year, na.rm = TRUE),
+    years_until_first_start = ifelse(
+      test = is.infinite(first_start_season),
+      yes = NA_integer_,
+      no = first_start_season - draft_year
+    ),
+    years_until_last_start = ifelse(
+      test = is.infinite(last_start_season),
+      yes = NA_integer_,
+      no = last_start_season - draft_year
+    ),
     .groups = "drop"
   )
 
-years_to_first_start %>%
-  count(years_until_first_start, name = "n") %>%
-  arrange(years_until_first_start)
+right_censor <- years_to_start |>
+  dplyr::count(years_until_first_start) |>
+  dplyr::mutate(pct = 1 - cumsum(n / sum(n[!is.na(years_until_first_start)]))) |>
+  dplyr::filter(pct > 1e-10)
+
+left_censor <- years_to_start |>
+  dplyr::count(years_until_last_start) |>
+  dplyr::mutate(pct = cumsum(n / sum(n[!is.na(years_until_last_start)])))
 
 num_trees <- 1000
 set.seed(123)
+
+features <- c(
+  ncaa_yds_per_att_career = "Career Pass Yds/Att",
+  ncaa_games_per_year = "Games/Season",
+  ncaa_att_per_year = "Pass Attempts/Season",
+  ncaa_cmp_per_year = "Pass Completions/Season",
+  ncaa_yds_per_year = "Pass Yards/Season",
+  ncaa_td_per_year = "Pass Touchdowns/Season",
+  ncaa_int_per_year = "Pass Interceptions/Season",
+  ncaa_rush_att_per_year = "Rush Attempts/Season",
+  ncaa_rush_yds_per_year = "Rush Yards/Season",
+  ncaa_rush_td_per_year = "Rush Touchdowns/Season",
+  ncaa_sos_last = "Final Strength of Schedule",
+  ncaa_games_last = "Final Games",
+  ncaa_yds_per_att_last = "Final Yds/Att",
+  ncaa_passer_rating_last = "Final Passer Rating",
+  ncaa_all_america = "All-America Seasons",
+  ncaa_heisman = "Won Heisman Award",
+  ncaa_heisman_last = "Final Heisman Voting"
+)
+
 
 # Determine mean regression for QBR ----
 
@@ -43,7 +80,8 @@ summary(QBR2_model)
 
 c <- coef(QBR2_model)[1]
 
-# Tune random forest ----
+
+# Make train/test split and divide training data into cross-validation folds ----
 
 data <- treecomp::quarterback %>%
   mutate(
@@ -68,6 +106,49 @@ past_data <- data %>%
       ifelse(reg_qbr > 0, "yes", "no"),
       levels = c("no", "yes")
     )
+  )
+
+# Approximately how many NFL careers do we think are hidden by the censoring?
+pct_censored <- past_data |>
+  dplyr::count(ncaa_year_last) |>
+  dplyr::mutate(
+    years_until_last_start = 2004 - ncaa_year_last,
+    years_until_first_start = 2023 - ncaa_year_last
+  ) |>
+  dplyr::left_join(left_censor, by = "years_until_last_start", suffix = c("", "_left")) |>
+  dplyr::rename(pct_left = pct) |>
+  dplyr::left_join(right_censor, by = "years_until_first_start", suffix = c("", "_right")) |>
+  dplyr::rename(pct_right = pct) |>
+  dplyr::mutate(
+    pct_left = dplyr::coalesce(pct_left, 0),
+    pct_right = dplyr::coalesce(pct_right, 0)
+  ) |>
+  dplyr::select(ncaa_year_last, n, pct_left, pct_right)
+
+pct_censored |>
+  dplyr::summarize(censored = weighted.mean(pct_left + pct_right, w = n))
+
+# Write feature list table to file
+past_data |>
+  dplyr::select(dplyr::all_of(names(features))) |>
+  tidyr::pivot_longer(cols = dplyr::everything()) |>
+  dplyr::group_by(name = factor(name, levels = unique(name))) |>
+  dplyr::summarize(
+    min = min(value),
+    q1 = quantile(value, probs = 0.25),
+    median = median(value),
+    mean = mean(value),
+    q3 = quantile(value, probs = 0.75),
+    max = max(value),
+    .groups = "drop"
+  ) |>
+  dplyr::mutate(name = features[name]) |>
+  sputil::write_latex_table(
+    file = "tables/feature_list.tex",
+    colnames = c("Feature", "Min", "Q1", "Median", "Mean", "Q3", "Max"),
+    align = "l|rrrrrr",
+    digits = 1,
+    hline.after = c(0, 2, 7, 10, 14)
   )
 
 classif_data <- past_data
@@ -121,12 +202,8 @@ folds_train_regr <- make_temporal_folds(
   min_train_years = 0   # because we're not doing "proper" temporal CV
 )
 
-grid <- expand.grid(
-  mtry = c(1, 2, 4, 8, 16),
-  min.node.size = c(5, 10, 25, 50, 100),
-  max.depth = c(2, 4, 8, 16, 32),
-  stringsAsFactors = FALSE
-)
+
+# Set up training and validation functions ----
 
 train_predict_ranger <- function(data_train,
                                  data_pred,
@@ -198,91 +275,36 @@ train_predict_glm <- function(data_train,
   return(list(fit = fit, pred = pred))
 }
 
+train_predict_knn <- function(data_train,
+                              data_pred,
+                              task = c("classification", "regression"),
+                              ...) {
 
-#pred_classification <- tibble::tibble()
-#pred_regression <- tibble::tibble()
-#
-#for (i in 1:nrow(grid)) {
-#
-#  if ((i %% 10) == 0) {
-#    logger::log_info("Training hyperparameter set {i} of {nrow(grid)}")
-#  }
-#
-#  for (k in 1:length(folds_train_cls)) {
-#
-#    data_train_classification_k <- data_train_classification |>
-#      dplyr::slice(folds_train_cls[[k]]$train)
-#
-#    data_pred_classification_k <- data_train_classification |>
-#      dplyr::slice(folds_train_cls[[k]]$test)
-#
-#    fit_classification <- train_predict_ranger(
-#      data_train = data_train_classification_k,
-#      data_pred = data_pred_classification_k,
-#      task = "classification",
-#      num.trees = num_trees,
-#      mtry = grid$mtry[i],
-#      min.node.size = grid$min.node.size[i],
-#      max.depth = grid$max.depth[i]
-#    )
-#
-#    sim_classification <- treecomp::extract_similarity(
-#      object = fit_classification$fit,
-#      newdata = data_pred_classification_k,
-#      refdata = data_train_classification_k,
-#      match_training = TRUE
-#    )
-#
-#    pred_classification <- dplyr::bind_rows(
-#      pred_classification,
-#      tibble::tibble(
-#        mtry = grid$mtry[i],
-#        min.node.size = grid$min.node.size[i],
-#        max.depth = grid$max.depth[i],
-#        index = folds_train_cls[[k]]$test,
-#        pred = fit_classification$pred,
-#        ess = 1 / rowSums(sim_classification^2),
-#        n_train = nrow(data_train_classification_k)
-#      )
-#    )
-#
-#    data_train_regression_k <- data_train_regression |>
-#      dplyr::slice(folds_train_regr[[k]]$train)
-#
-#    data_pred_regression_k <- data_train_regression |>
-#      dplyr::slice(folds_train_regr[[k]]$test)
-#
-#    fit_regression <- train_predict_ranger(
-#      data_train = data_train_regression_k,
-#      data_pred = data_pred_regression_k,
-#      task = "regression",
-#      num.trees = num_trees,
-#      mtry = grid$mtry[i],
-#      min.node.size = grid$min.node.size[i],
-#      max.depth = grid$max.depth[i]
-#    )
-#
-#    sim_regression <- treecomp::extract_similarity(
-#      object = fit_regression$fit,
-#      newdata = data_pred_regression_k,
-#      refdata = data_train_regression_k,
-#      match_training = TRUE
-#    )
-#
-#    pred_regression <- dplyr::bind_rows(
-#      pred_regression,
-#      tibble::tibble(
-#        mtry = grid$mtry[i],
-#        min.node.size = grid$min.node.size[i],
-#        max.depth = grid$max.depth[i],
-#        index = folds_train_regr[[k]]$test,
-#        pred = fit_regression$pred,
-#        ess = 1 / rowSums(sim_regression^2),
-#        n_train = nrow(data_train_regression_k)
-#      )
-#    )
-#  }
-#}
+  data_combined <- dplyr::bind_rows(data_train, data_pred) |>
+    dplyr::select(
+      ncaa_yds_per_att_career, ncaa_games_per_year,
+      ncaa_att_per_year, ncaa_cmp_per_year, ncaa_yds_per_year, ncaa_td_per_year, ncaa_int_per_year,
+      ncaa_rush_att_per_year, ncaa_rush_yds_per_year, ncaa_rush_td_per_year,
+      ncaa_sos_last, ncaa_games_last, ncaa_yds_per_att_last, ncaa_passer_rating_last,
+      ncaa_all_america, ncaa_heisman, ncaa_heisman_last,
+    ) |>
+    scale()
+  
+  train <- data_combined[1:nrow(data_train), ]
+  test <- data_combined[-(1:nrow(data_train)), ]
+
+  if (task == "classification") {
+    outcome <- as.numeric(data_train$played_nfl == "yes")
+  } else {
+    outcome <- data_train$reg_qbr
+  }
+
+  fit <- FNN::knn.reg(train = train, test = test, y = outcome, ...)
+  pred <- fit$pred
+
+  return(list(fit = fit, pred = pred))
+}
+
 validate <- function(args,
                      data_train_classification,
                      data_train_regression,
@@ -367,6 +389,16 @@ validate <- function(args,
   )
 }
 
+
+# Tune the random forest models ----
+
+grid <- expand.grid(
+  mtry = c(1, 2, 4, 8, 16),
+  min.node.size = c(5, 10, 25, 50, 100),
+  max.depth = c(2, 4, 8, 16, 32),
+  stringsAsFactors = FALSE
+)
+
 args_table <- dplyr::cross_join(grid, tibble::tibble(fold = 1:length(folds_train_cls)))
 args_list <- split(args_table, f = 1:nrow(args_table))
 
@@ -424,6 +456,7 @@ param_min_regression <- cv_regression |>
   dplyr::arrange(deviance) |>
   dplyr::slice(1)
 
+# Examine sensitivity of ESS to hyperparameters ----
 
 {
   sputil::open_device("figures/ESS_vs_hyperparameter_values.pdf", height = 4, width = 8)
@@ -453,6 +486,68 @@ param_min_regression <- cv_regression |>
 }
 
 
+# Tune k-nearest neighbors ----
+
+pred_knn_oos_cls <- NULL
+pred_knn_oos_regr <- NULL
+
+for (f in 1:length(folds_train_cls)) {
+  for (k in 1:100) {
+    fit_cls <- train_predict_knn(
+      data_train = data_train_classification |>
+        dplyr::slice(folds_train_cls[[f]]$train),
+      data_pred = data_train_classification |>
+        dplyr::slice(folds_train_cls[[f]]$test),
+      task = "classification",
+      k = k
+    )
+    pred_knn_oos_cls <- tibble::tibble(
+      index = folds_train_cls[[f]]$test,
+      k = k,
+      pred = fit_cls$pred
+    ) |>
+      dplyr::bind_rows(pred_knn_oos_cls)
+
+    fit_regr <- train_predict_knn(
+      data_train = data_train_regression |>
+        dplyr::slice(folds_train_regr[[f]]$train),
+      data_pred = data_train_regression |>
+        dplyr::slice(folds_train_regr[[f]]$test),
+      task = "regression",
+      k = k
+    )
+    pred_knn_oos_regr <- tibble::tibble(
+      index = folds_train_regr[[f]]$test,
+      k = k,
+      pred = fit_regr$pred
+    ) |>
+      dplyr::bind_rows(pred_knn_oos_regr)
+  }
+}
+
+cv_classification_knn <- data_train_classification |>
+  dplyr::mutate(index = 1:dplyr::n()) |>
+  dplyr::left_join(pred_knn_oos_cls, by = "index") |>
+  dplyr::mutate(
+    deviance = -2 * log(ifelse(played_nfl == "yes", pred, 1 - pred))
+  ) |>
+  dplyr::group_by(k) |>
+  dplyr::summarize(deviance = mean(deviance), .groups = "drop") |>
+  dplyr::arrange(deviance)
+
+cv_regression_knn <- data_train_regression |>
+  dplyr::mutate(index = 1:dplyr::n()) |>
+  dplyr::left_join(pred_knn_oos_regr, by = "index") |>
+  dplyr::mutate(
+    deviance = (reg_qbr - pred)^2
+  ) |>
+  dplyr::group_by(k) |>
+  dplyr::summarize(deviance = mean(deviance), .groups = "drop") |>
+  dplyr::arrange(deviance)
+
+
+
+# Fit full models after hyperparameter tuning ----
 
 fit_rf_classification <- train_predict_ranger(
   data_train = data_train_classification,
@@ -486,6 +581,20 @@ fit_glm_regression <- train_predict_glm(
   task = "regression"
 )
 
+fit_knn_classification <- train_predict_knn(
+  data_train = data_train_classification,
+  data_pred = data_test,
+  task = "classification",
+  k = cv_classification_knn$k[1]
+)
+
+fit_knn_regression <- train_predict_knn(
+  data_train = data_train_regression,
+  data_pred = data_test,
+  task = "regression",
+  k = cv_regression_knn$k[1]
+)
+
 data_test_pred <- data_test |>
   dplyr::mutate(
     pred_rf_classification = fit_rf_classification$pred,
@@ -494,19 +603,27 @@ data_test_pred <- data_test |>
     pred_glm_classification = fit_glm_classification$pred,
     pred_glm_regression = fit_glm_regression$pred,
     pred_glm_qbr = pred_glm_classification * pred_glm_regression,
+    pred_knn_classification = fit_knn_classification$pred,
+    pred_knn_regression = fit_knn_regression$pred,
+    pred_knn_qbr = pred_knn_classification * pred_knn_regression,
   )
 
 data_test_pred |>
   dplyr::summarize(
     deviance_null = mean((reg_qbr - mean(reg_qbr))^2),
     deviance_rf = mean((reg_qbr - pred_rf_qbr)^2),
-    deviance_glm = mean((reg_qbr - pred_glm_qbr)^2)
+    deviance_glm = mean((reg_qbr - pred_glm_qbr)^2),
+    deviance_knn = mean((reg_qbr - pred_knn_qbr)^2)
   ) |>
   dplyr::mutate(
     devexp_rf = 1 - deviance_rf / deviance_null,
-    devexp_glm = 1 - deviance_glm / deviance_null
+    devexp_glm = 1 - deviance_glm / deviance_null,
+    devexp_knn = 1 - deviance_knn / deviance_null
   ) |>
   dplyr::select(dplyr::starts_with("devexp_"))
+
+
+# Re-train random forest model on full (train + test) data after validating test performance ----
 
 fit_rf_classification_full <- train_predict_ranger(
   data_train = classif_data,
@@ -529,44 +646,29 @@ fit_rf_regression_full <- train_predict_ranger(
 )
 
 
+# Extract importance scores from random forest model ----
 
 rgr_importance_scores <- importance(fit_rf_regression_full$fit)
 cls_importance_scores <- importance(fit_rf_classification_full$fit)
-variable_display <- c(
-  ncaa_yds_per_att_career = "Career Yds/Att",
-  ncaa_games_per_year = "Games/Season",
-  ncaa_att_per_year = "Attempts/Season",
-  ncaa_cmp_per_year = "Completions/Season",
-  ncaa_yds_per_year = "Yards/Season",
-  ncaa_td_per_year = "Touchdowns/Season",
-  ncaa_int_per_year = "Interceptions/Season",
-  ncaa_rush_att_per_year = "Rush Attempts/Season",
-  ncaa_rush_yds_per_year = "Rush Yards/Season",
-  ncaa_rush_td_per_year = "Rush Touchdowns/Season",
-  ncaa_sos_last = "Final Strength of Schedule",
-  ncaa_games_last = "Final Games",
-  ncaa_yds_per_att_last = "Final Yds/Att",
-  ncaa_passer_rating_last = "Final Passer Rating",
-  ncaa_all_america = "All-America Seasons",
-  ncaa_heisman = "Won Heisman Award",
-  ncaa_heisman_last = "Final Heisman Voting"
-)
 rgr_importance_df <- data.frame(
-  Variable = variable_display[names(rgr_importance_scores)],
+  Variable = features[names(rgr_importance_scores)],
   Importance = rgr_importance_scores
 )
 cls_importance_df <- data.frame(
-  Variable = variable_display[names(cls_importance_scores)],
+  Variable = features[names(cls_importance_scores)],
   Importance = cls_importance_scores
 )
 
 {
   sputil::open_device("figures/rgr_variable_importance.pdf", height = 5)
-  plot <- ggplot(rgr_importance_df, aes(x = reorder(Variable, Importance), y = Importance)) +
+  breaks <- seq(0, 0.12, by = 0.03)
+  plot <- rgr_importance_df |>
+    dplyr::mutate(Importance = Importance / sum(Importance)) |>
+    ggplot(aes(x = reorder(Variable, Importance), y = Importance)) +
     geom_bar(stat = "identity") +
-    coord_flip() +  
-    labs(title = "Regression Model Variable Importance",
-         x = "", y = "Importance") +
+    scale_y_continuous(breaks = breaks, labels = paste0(100 * breaks, "%")) +
+    coord_flip(ylim = c(0, 0.12)) +
+    labs(title = "Regression Model Variable Importance", x = "", y = "Importance") +
     theme_minimal()
   print(plot)
   dev.off()
@@ -574,11 +676,14 @@ cls_importance_df <- data.frame(
 
 {
   sputil::open_device("figures/cls_variable_importance.pdf", height = 5)
-  plot <- ggplot(cls_importance_df, aes(x = reorder(Variable, Importance), y = Importance)) +
+  breaks <- seq(0, 0.12, by = 0.03)
+  plot <- cls_importance_df |>
+    dplyr::mutate(Importance = Importance / sum(Importance)) |>
+    ggplot(aes(x = reorder(Variable, Importance), y = Importance)) +
     geom_bar(stat = "identity") +
-    coord_flip() +  
-    labs(title = "Classification Model Variable Importance",
-         x = "", y = "Importance") +
+    scale_y_continuous(breaks = breaks, labels = paste0(100 * breaks, "%")) +
+    coord_flip(ylim = c(0, 0.12)) +
+    labs(title = "Classification Model Variable Importance", x = "", y = "Importance") +
     theme_minimal()
   print(plot)
   dev.off()
@@ -642,20 +747,23 @@ present_data <- present_data |>
   )
 
 present_data |>
-  dplyr::arrange(-predictions) |>
-  dplyr::mutate(
-    pred_classification = paste0(round(100 * pred_classification), "\\%"),
-    pred_regression = sprintf("%.1f", pred_regression),
-    predictions = sprintf("%.1f", predictions)
-  ) |>
-  dplyr::select(player_name, pred_classification, pred_regression, predictions) |>
   # Remove draft-ineligible players
   dplyr::filter(!player_name %in% c("Darian Mensah", "Cade Klubnik", "E.J. Warner", "Cameron Skattebo")) |>
-  head(10) |>
+  dplyr::arrange(-predictions) |>
+  dplyr::mutate(
+    rank = 1:dplyr::n(),
+    pred_classification = paste0(round(100 * pred_classification), "\\%"),
+    pred_regression = sprintf("%.1f", pred_regression),
+    predictions = sprintf("%.1f", predictions),
+    player_name_display = ifelse(player_name %in% interpreted_players, glue::glue("\\textbf{{{player_name}}}"), player_name)
+  ) |>
+  dplyr::filter(rank %in% 1:10 | player_name == "Tyler Shough") |>
+  dplyr::select(player_name_display, pred_classification, pred_regression, predictions) |>
   sputil::write_latex_table(
     file = "tables/top_ten.tex",
     colnames = c("Quarterback", "P(QBR $>$ 0)", "E[QBR $|$ QBR $>$ 0]", "Predicted QBR"),
-    align = "l|cc|c"
+    align = "l|cc|c",
+    hline.after = c(0, 10)
   )
 
 
@@ -706,7 +814,7 @@ get_prospect_plots <- function(player, present_data, similarity_matrix_rgr,
            title = player) +
       geom_vline(aes(xintercept = present_data[index, ]$predictions), 
                  color = "darkorange", linewidth = 2) +
-      coord_cartesian(ylim = c(0, 0.08))
+      coord_cartesian(ylim = c(0, 0.2))
     print(plot)
     dev.off()
     }
@@ -725,31 +833,32 @@ get_prospect_plots <- function(player, present_data, similarity_matrix_rgr,
   }
 }
 
+interpreted_players <- c("Cameron Ward", "Jaxson Dart", "Tyler Shough", "Dillon Gabriel")
+
 get_prospect_plots("Cameron Ward", present_data, similarity_matrix_rgr,
                     qbr_data, "ward")
-get_prospect_plots("Shedeur Sanders", present_data, similarity_matrix_rgr,
-                   qbr_data, "sanders")
 get_prospect_plots("Jaxson Dart", present_data, similarity_matrix_rgr,
                    qbr_data, "dart")
 get_prospect_plots("Tyler Shough", present_data, similarity_matrix_rgr,
                    qbr_data, "shough")
+get_prospect_plots("Dillon Gabriel", present_data, similarity_matrix_rgr,
+                   qbr_data, "gabriel")
 
 
 get_top10_comps_side_by_side <- function(target_name,
                                          player_initials,
-                                         similarity_matrix_rgr,
+                                         similarity_matrix,
                                          present_data,
-                                         past_data,
-                                         qbr_data,
+                                         reference_data,
                                          qbr_col = "reg_qbr") {
   
   idx <- match(target_name, present_data$player_name)
   if (is.na(idx)) stop("target_name not found in present_data$player_name")
   
   rgr_top10 <- tibble(
-    rgr_player = qbr_data$player_name,
-    rgr_sim    = as.numeric(similarity_matrix_rgr[idx, , drop = TRUE]),
-    rgr_qbr    = qbr_data[[qbr_col]]
+    rgr_player = reference_data$player_name,
+    rgr_sim    = as.numeric(similarity_matrix[idx, , drop = TRUE]),
+    rgr_qbr    = reference_data[[qbr_col]]
   ) %>%
     filter(rgr_sim > 0) %>%
     arrange(desc(rgr_sim)) %>%
@@ -764,25 +873,44 @@ get_top10_comps_side_by_side <- function(target_name,
     )
 }
 
-cw_df <- get_top10_comps_side_by_side("Cameron Ward", "CW", similarity_matrix_rgr, 
-                                      present_data, past_data, qbr_data) 
-ss_df <- get_top10_comps_side_by_side("Shedeur Sanders", "SS", similarity_matrix_rgr, 
-                                      present_data, past_data, qbr_data) 
-jd_df <- get_top10_comps_side_by_side("Jaxson Dart", "JD", similarity_matrix_rgr, 
-                                      present_data, past_data, qbr_data) 
-ts_df <- get_top10_comps_side_by_side("Tyler Shough", "TS", similarity_matrix_rgr, 
-                                      present_data, past_data, qbr_data) 
+ts_df_cls <- get_top10_comps_side_by_side(
+  target_name = "Tyler Shough",
+  player_initials = "TS",
+  similarity_matrix = similarity_matrix_cls,
+  present_data = present_data,
+  reference_data = past_data
+) 
+ts_df_rgr <- get_top10_comps_side_by_side(
+  target_name = "Tyler Shough",
+  player_initials = "TS",
+  similarity_matrix = similarity_matrix_rgr,
+  present_data = present_data,
+  reference_data = qbr_data
+) 
+dg_df_cls <- get_top10_comps_side_by_side(
+  target_name = "Dillon Gabriel",
+  player_initials = "DG",
+  similarity_matrix = similarity_matrix_cls,
+  present_data = present_data,
+  reference_data = past_data
+) 
+dg_df_rgr <- get_top10_comps_side_by_side(
+  target_name = "Dillon Gabriel",
+  player_initials = "DG",
+  similarity_matrix = similarity_matrix_rgr,
+  present_data = present_data,
+  reference_data = qbr_data
+) 
 
-cbind(cw_df, ss_df, jd_df, ts_df) %>%
+
+cbind(ts_df_cls, ts_df_rgr, dg_df_cls, dg_df_rgr) %>%
   sputil::write_latex_table(
     file = "tables/side_by_side_similarity.tex",
     colnames = rep(c("Comp", "Score"), times = 4),
-    prefix_rows = "
-      \\multicolumn{2}{c|}{Cam Ward} &
-      \\multicolumn{2}{c|}{Shedeur Sanders} &
-      \\multicolumn{2}{c|}{Jaxson Dart} &
-      \\multicolumn{2}{c}{Tyler Shough}
-    ",
+    prefix_rows = c(
+      "\\multicolumn{4}{c|}{Tyler Shough} & \\multicolumn{4}{c}{Dillon Gabriel}",
+      "\\multicolumn{2}{c}{Stage 1 (Classification)} & \\multicolumn{2}{c|}{Stage 2 (Regression)} & \\multicolumn{2}{c}{Stage 1 (Classification)} & \\multicolumn{2}{c}{Stage 2 (Regression)}"
+    ),
     align = "lr|lr|lr|lr"
   )
 
@@ -827,7 +955,7 @@ all_similarity_stats <- lapply(seq_len(nrow(similarity_matrix_rgr)), function(i)
     comps_90,
     top_k_share_pct = paste0(sprintf("%.1f", 100 * top_k_share), "\\%")
   ) %>%
-  filter(player_name %in% c("Cameron Ward", "Shedeur Sanders", "Jaxson Dart", "Tyler Shough"))
+  filter(player_name %in% interpreted_players)
 
 all_similarity_stats %>%
   sputil::write_latex_table(
@@ -837,9 +965,6 @@ all_similarity_stats %>%
   )
 
 library(purrr)
-
-players_to_plot <- c("Cameron Ward", "Shedeur Sanders", 
-                     "Jaxson Dart", "Tyler Shough")
 
 plot_df <- map_dfr(seq_len(nrow(similarity_matrix_rgr)), function(i) {
   
@@ -863,11 +988,11 @@ plot_df <- map_dfr(seq_len(nrow(similarity_matrix_rgr)), function(i) {
 {
   sputil::open_device("figures/comp_pct_plot.pdf", height = 5)
   plot <- plot_df |>
-    dplyr::filter(player_name %in% players_to_plot) |>
+    dplyr::filter(player_name %in% interpreted_players) |>
     dplyr::mutate(
       player_name = factor(
         player_name,
-        levels = c("Cameron Ward", "Shedeur Sanders", "Jaxson Dart", "Tyler Shough")
+        levels = interpreted_players
       )
     ) |>
     ggplot2::ggplot(ggplot2::aes(x = n_comps, y = pct_prediction, color = player_name)) +
