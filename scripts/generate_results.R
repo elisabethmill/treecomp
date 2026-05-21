@@ -952,7 +952,7 @@ all_similarity_stats <- lapply(seq_len(nrow(similarity_matrix_rgr)), function(i)
     comps_90,
     top_k_share_pct = paste0(sprintf("%.1f", 100 * top_k_share), "\\%")
   ) %>%
-  filter(player_name %in% c("Cameron Ward", "Shedeur Sanders", "Jaxson Dart", "Tyler Shough"))
+  filter(player_name %in% c("Cameron Ward", "Jaxson Dart", "Tyler Shough", "Dillon Gabriel"))
 
 all_similarity_stats %>%
   sputil::write_latex_table(
@@ -963,8 +963,7 @@ all_similarity_stats %>%
 
 library(purrr)
 
-players_to_plot <- c("Cameron Ward", "Shedeur Sanders", 
-                     "Jaxson Dart", "Tyler Shough")
+players_to_plot <- c("Cameron Ward", "Jaxson Dart", "Tyler Shough", "Dillon Gabriel")
 
 plot_df <- map_dfr(seq_len(nrow(similarity_matrix_rgr)), function(i) {
   
@@ -992,7 +991,7 @@ plot_df <- map_dfr(seq_len(nrow(similarity_matrix_rgr)), function(i) {
     dplyr::mutate(
       player_name = factor(
         player_name,
-        levels = c("Cameron Ward", "Shedeur Sanders", "Jaxson Dart", "Tyler Shough")
+        levels = c("Cameron Ward", "Jaxson Dart", "Tyler Shough", "Dillon Gabriel")
       )
     ) |>
     ggplot2::ggplot(ggplot2::aes(x = n_comps, y = pct_prediction, color = player_name)) +
