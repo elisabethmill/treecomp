@@ -754,10 +754,11 @@ present_data |>
     rank = 1:dplyr::n(),
     pred_classification = paste0(round(100 * pred_classification), "\\%"),
     pred_regression = sprintf("%.1f", pred_regression),
-    predictions = sprintf("%.1f", predictions)
+    predictions = sprintf("%.1f", predictions),
+    player_name_display = ifelse(player_name %in% interpreted_players, glue::glue("\\textbf{{{player_name}}}"), player_name)
   ) |>
   dplyr::filter(rank %in% 1:10 | player_name == "Tyler Shough") |>
-  dplyr::select(player_name, pred_classification, pred_regression, predictions) |>
+  dplyr::select(player_name_display, pred_classification, pred_regression, predictions) |>
   sputil::write_latex_table(
     file = "tables/top_ten.tex",
     colnames = c("Quarterback", "P(QBR $>$ 0)", "E[QBR $|$ QBR $>$ 0]", "Predicted QBR"),
@@ -831,6 +832,8 @@ get_prospect_plots <- function(player, present_data, similarity_matrix_rgr,
     dev.off()
   }
 }
+
+interpreted_players <- c("Cameron Ward", "Jaxson Dart", "Tyler Shough", "Dillon Gabriel")
 
 get_prospect_plots("Cameron Ward", present_data, similarity_matrix_rgr,
                     qbr_data, "ward")
@@ -952,7 +955,7 @@ all_similarity_stats <- lapply(seq_len(nrow(similarity_matrix_rgr)), function(i)
     comps_90,
     top_k_share_pct = paste0(sprintf("%.1f", 100 * top_k_share), "\\%")
   ) %>%
-  filter(player_name %in% c("Cameron Ward", "Jaxson Dart", "Tyler Shough", "Dillon Gabriel"))
+  filter(player_name %in% interpreted_players)
 
 all_similarity_stats %>%
   sputil::write_latex_table(
@@ -962,8 +965,6 @@ all_similarity_stats %>%
   )
 
 library(purrr)
-
-players_to_plot <- c("Cameron Ward", "Jaxson Dart", "Tyler Shough", "Dillon Gabriel")
 
 plot_df <- map_dfr(seq_len(nrow(similarity_matrix_rgr)), function(i) {
   
@@ -987,11 +988,11 @@ plot_df <- map_dfr(seq_len(nrow(similarity_matrix_rgr)), function(i) {
 {
   sputil::open_device("figures/comp_pct_plot.pdf", height = 5)
   plot <- plot_df |>
-    dplyr::filter(player_name %in% players_to_plot) |>
+    dplyr::filter(player_name %in% interpreted_players) |>
     dplyr::mutate(
       player_name = factor(
         player_name,
-        levels = c("Cameron Ward", "Jaxson Dart", "Tyler Shough", "Dillon Gabriel")
+        levels = interpreted_players
       )
     ) |>
     ggplot2::ggplot(ggplot2::aes(x = n_comps, y = pct_prediction, color = player_name)) +
