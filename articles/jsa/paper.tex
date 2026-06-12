@@ -1,4 +1,4 @@
-\documentclass[Review, sageh, times]{sagej} 
+\documentclass[Review, sageh, times, doublespace]{sagej} 
 
 \usepackage{amsmath, amsfonts, array, float, graphicx, moreverb, natbib, subcaption, url, xcolor}
 
@@ -12,14 +12,14 @@
 
 \title{\revision{Models in the War Room: Translating random forest predictions into player comps}}
 
-\author{Elisabeth Millington\affilnum{1} and Scott Powers\affilnum{2}}
-
-\affiliation{\affilnum{1}Department of Kinesiology, Rice University\\
-\affilnum{2}Department of Sport Management, Rice University}
-
-\corrauth{Scott Powers, 6100 Main St, Houston, TX, 77005}
-
-\email{scott.powers@rice.edu}
+%\author{Elisabeth Millington\affilnum{1} and Scott Powers\affilnum{2}}
+%
+%\affiliation{\affilnum{1}Department of Kinesiology, Rice University\\
+%\affilnum{2}Department of Sport Management, Rice University}
+%
+%\corrauth{Scott Powers, 6100 Main St, Houston, TX, 77005}
+%
+%\email{scott.powers@rice.edu}
 
 \begin{abstract}
   \revision{
@@ -104,7 +104,7 @@ $$
 The primary contribution of the present work is less about the specific application to quarterback prospects in football and more about introducing the concept of extracting similarity scores from random forests to interpret the predictions. To this end, we have published the R package treecomp, which provides a simple function interface for extracting similarity scores from fitted random forest objects. Currently, the package handles fitted random forests from the ranger and randomForest packages. The \texttt{extract\_similarity} function has syntax similar to a \texttt{predict} method and requires as arguments only the fitted random forest object, the new data (for whom comps are to be found) and the reference data (the candidate comps). If the reference data are the same as the training data, then the predictions of the random forest can be recovered as the weighted average of the training outcomes, weighted by similarity score. However, it is also possible to use a different dataset as the reference data; in this case, the similarity is still interpretable as reflecting the adaptive nearness learned by the random forest, which is more informative than a similarity based on Euclidean distance giving equal weight to all features.
 
 \revision{
-  The treecomp package, along with an R script for reproducing the results of this paper, is available at \url{https://github.com/elisabethmill/treecomp}.
+  The treecomp package, along with an R script for reproducing the results of this paper, is available at \url{https://github.com/REDACTED/treecomp}.
 }
 
 \section{\revision{Application: NFL Draft Prospects}}
@@ -305,9 +305,9 @@ The smaller the ESS, the fewer player comps are needed to explain the random for
 
 \revision{However, the idea of extracting similarity scores from random forests to translate the predictions into the language of player comps in professional sports applies more broadly beyond this specific application.} These similarity scores have the nice property that the random forest predictions are the weighted averages of outcomes in the training set, weighted according to these similarity scores. We have published \revision{the} R package treecomp, which allow\revision{s} researchers and practitioners to extract similarity scores from their own random forest models. Future work could extend \revision{this work} to other tree-based regression and classification models, such as gradient boosting.
 
-\section{Acknowledgments}
-
-The authors thank Kevin Meers for suggestions that led to improvements in the random forest model for predicting NFL quarterback prospect success.
+%\section{Acknowledgments}
+%
+%The authors thank Kevin Meers for suggestions that led to improvements in the random forest model for predicting NFL quarterback prospect success.
 
 \section{Author contributions}
 
@@ -337,7 +337,7 @@ The authors received no financial support for the research, authorship, and/or p
 
 \subsection{Code and Data Availability}
 
-The data used for this paper are included in the R package treecomp, which is available at \url{https://github.com/elisabethmill/treecomp}. The repository also includes code for reproducing the results in this paper.
+The data used for this paper are included in the R package treecomp, which is available at \url{https://github.com/REDACTED/treecomp}. The repository also includes code for reproducing the results in this paper.
 
 \bibliographystyle{SageH}
 \bibliography{../random-forest-comps}
