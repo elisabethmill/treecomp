@@ -708,7 +708,7 @@ new_plot_data <- past_data %>%
     scale_color_viridis_c() +
     labs(
       x = "Final Strength of Schedule",
-      y = "Career Yds/Att",
+      y = "Career Pass Yds/Att",
       color = "Predicted QBR"
     ) +
     theme_minimal() +
@@ -745,6 +745,8 @@ present_data <- present_data |>
     pred_regression = predict(fit_rf_regression_full$fit, data = present_data)$predictions,
     predictions = pred_classification * pred_regression
   )
+
+interpreted_players <- c("Cameron Ward", "Jaxson Dart", "Tyler Shough", "Dillon Gabriel")
 
 present_data |>
   # Remove draft-ineligible players
@@ -832,8 +834,6 @@ get_prospect_plots <- function(player, present_data, similarity_matrix_rgr,
     dev.off()
   }
 }
-
-interpreted_players <- c("Cameron Ward", "Jaxson Dart", "Tyler Shough", "Dillon Gabriel")
 
 get_prospect_plots("Cameron Ward", present_data, similarity_matrix_rgr,
                     qbr_data, "ward")
