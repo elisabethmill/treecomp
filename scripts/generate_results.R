@@ -214,6 +214,7 @@ train_predict_ranger <- function(data_train,
 
   if (task == "classification") {
     data_train$outcome <- data_train$played_nfl
+    data_train$outcome <- factor(ifelse(data_train$played_nfl == "yes", 1, 0), levels = 0:1)
   } else {
     data_train$outcome <- data_train$reg_qbr
   }
@@ -233,7 +234,7 @@ train_predict_ranger <- function(data_train,
   )
 
   if (task == "classification") {
-    pred <- predict(fit, data = data_pred)$predictions[, "yes"]
+    pred <- predict(fit, data = data_pred)$predictions[, "1"]
   } else {
     pred <- predict(fit, data = data_pred)$predictions
   }
@@ -403,6 +404,7 @@ args_table <- dplyr::cross_join(grid, tibble::tibble(fold = 1:length(folds_train
 args_list <- split(args_table, f = 1:nrow(args_table))
 
 cluster <- parallel::makeCluster(parallel::detectCores())
+parallel::clusterSetRNGStream(cl = cluster, iseed = 123)
 pred_list <- pbapply::pblapply(
   X = args_list,
   FUN = validate,
@@ -913,6 +915,89 @@ cbind(ts_df_cls, ts_df_rgr, dg_df_cls, dg_df_rgr) %>%
     ),
     align = "lr|lr|lr|lr"
   )
+
+
+# Create SHAP value plots ----
+
+all_data_classification <- dplyr::bind_rows(present_data, past_data) |>
+  dplyr::select(player_name, dplyr::all_of(names(features))) |>
+  tidyr::drop_na()
+
+shap_classification <- fit_rf_classification_full$fit |>
+  treeshap::ranger.unify(all_data_classification) |>
+  treeshap::treeshap(all_data_classification)
+
+shapviz_classification <- shapviz::shapviz(shap_classification, data = all_data_classification)
+colnames(shapviz_classification) <- features[colnames(shapviz_classification)]
+
+{
+  sputil::open_device("figures/shap_classification.pdf", height = 7, width = 4)
+  plot <- shapviz_classification |>
+    shapviz::sv_importance(kind = "bee", max_display = Inf) +
+    ggplot2::labs(title = "Stage 1 (Classification)") +
+    ggplot2::theme(legend.position = "none")
+  print(plot)
+  dev.off()
+}
+
+{
+  sputil::open_device("figures/shap_classification_shough.pdf", height = 4, width = 5)
+  plot <- shapviz_classification |>
+    shapviz::sv_waterfall(row_id = which(all_data_classification$player_name == "Tyler Shough")) +
+    ggplot2::labs(title = "Tyler Shough Stage 1 (Classification)")
+  print(plot)
+  dev.off()
+}
+
+{
+  sputil::open_device("figures/shap_classification_gabriel.pdf", height = 4, width = 5)
+  plot <- shapviz_classification |>
+    shapviz::sv_waterfall(row_id = which(all_data_classification$player_name == "Dillon Gabriel")) +
+    ggplot2::labs(title = "Dillon Gabriel Stage 1 (Classification)")
+  print(plot)
+  dev.off()
+}
+
+
+all_data_regression <- dplyr::bind_rows(present_data, qbr_data) |>
+  dplyr::select(player_name, dplyr::all_of(names(features))) |>
+  tidyr::drop_na()
+
+shap_regression <- fit_rf_regression_full$fit |>
+  treeshap::ranger.unify(all_data_regression) |>
+  treeshap::treeshap(all_data_regression)
+
+shapviz_regression <- shapviz::shapviz(shap_regression, data = all_data_regression)
+colnames(shapviz_regression) <- features[colnames(shapviz_regression)]
+
+{
+  sputil::open_device("figures/shap_regression.pdf", height = 7, width = 5)
+  plot <- shapviz_regression |>
+    shapviz::sv_importance(kind = "bee", max_display = Inf) +
+    ggplot2::labs(title = "Stage 2 (Regression)")
+  print(plot)
+  dev.off()
+}
+
+{
+  sputil::open_device("figures/shap_regression_shough.pdf", height = 4, width = 5)
+  plot <- shapviz_regression |>
+    shapviz::sv_waterfall(row_id = which(all_data_regression$player_name == "Tyler Shough")) +
+    ggplot2::labs(title = "Tyler Shough Stage 2 (Regression)")
+  print(plot)
+  dev.off()
+}
+
+{
+  sputil::open_device("figures/shap_regression_gabriel.pdf", height = 4, width = 5)
+  plot <- shapviz_regression |>
+    shapviz::sv_waterfall(row_id = which(all_data_regression$player_name == "Dillon Gabriel")) +
+    ggplot2::labs(title = "Dillon Gabriel Stage 2 (Regression)")
+  print(plot)
+  dev.off()
+}
+
+
 
 
 # Helper to compute ENC and cumulative weight stats for a single similarity vector
